@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import InputField from "../components/InputField";
 import BlurText from "../components/ui/BlurText";
-import Toast from "../components/Toast";
 import apiClient from "../api/axiosClient";
 
 const Login = () => {
@@ -12,7 +11,6 @@ const Login = () => {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState({ message: "", type: "success" });
   const [isLoginSuccess, setIsLoginSuccess] = useState(false);
   // Allow users to choose OTP-based login; default is session-based direct login
   const [useOtp, setUseOtp] = useState(false);
@@ -62,20 +60,14 @@ const Login = () => {
           },
           resp.token
         );
-        const fullName = resp.fullName || "";
-        const firstName = fullName.trim().split(/\s+/)[0] || "User";
         setIsLoginSuccess(true);
-        setToast({
-          message: `Login Successfully`,
-          type: "success",
-        });
         const dest =
           resp.role === "admin"
             ? "/admin"
             : resp.role === "staff"
             ? "/"
             : "/student";
-        setTimeout(() => navigate(dest), 1000);
+        navigate(dest, { state: { loginSuccess: true } });
         return;
       }
 
@@ -114,20 +106,14 @@ const Login = () => {
           },
           data.token
         );
-        const fullName = data.fullName || "";
-        const firstName = fullName.trim().split(/\s+/)[0] || "User";
         setIsLoginSuccess(true);
-        setToast({
-          message: `Login Successfully`,
-          type: "success",
-        });
         const dest =
           data.role === "admin"
             ? "/admin"
             : data.role === "staff"
             ? "/"
             : "/student";
-        setTimeout(() => navigate(dest), 1000);
+        navigate(dest, { state: { loginSuccess: true } });
       } else {
         navigate("/");
       }
@@ -167,12 +153,6 @@ const Login = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-slate-900 flex items-center justify-center p-4">
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        duration={3000}
-        onClose={() => setToast({ message: "", type: "success" })}
-      />
       {!isLoginSuccess && (
         <div className="glitter-card bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 ring-1 ring-slate-300/60 max-w-md w-full">
           <div className="text-center mb-3">

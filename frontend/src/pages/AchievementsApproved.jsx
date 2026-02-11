@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import apiClient from "../api/axiosClient";
 import { Link } from "react-router-dom";
 import AttachmentPreview from "../components/AttachmentPreview";
+import { generateAcademicYears } from "../utils/academicYears";
 
 export default function AchievementsApproved() {
   const [items, setItems] = useState([]);

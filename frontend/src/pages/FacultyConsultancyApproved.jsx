@@ -142,11 +142,11 @@ export default function FacultyConsultancyApproved() {
 
         {/* Items Grid */}
         {!loading && pageItems.length > 0 && (
-          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 mb-8">
+          <div className="space-y-6 mb-8">
             {pageItems.map((item) => (
               <Card
                 key={item.id}
-                className="p-6 flex flex-col hover:shadow-lg transition-shadow"
+                className="p-6 flex flex-col hover:shadow-lg transition-shadow w-full border-sky-300"
               >
                 {/* Header */}
                 <div className="mb-4">

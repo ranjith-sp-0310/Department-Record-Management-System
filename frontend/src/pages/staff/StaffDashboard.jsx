@@ -4,6 +4,9 @@ import { useAuth } from "../../hooks/useAuth";
 import ProjectsManagement from "./ProjectsManagement";
 import AchievementsManagement from "./AchievementsManagement";
 import EventsManagement from "./EventsManagement";
+import FacultyResearch from "./FacultyResearch";
+import FacultyParticipation from "./FacultyParticipation";
+import FacultyConsultancy from "./FacultyConsultancy";
 import QuickActions from "../QuickActions";
 import apiClient from "../../api/axiosClient";
 import { useEffect, useState } from "react";
@@ -75,6 +78,9 @@ const StaffDashboard = () => {
                   element={<AchievementsManagement />}
                 />
                 <Route path="events" element={<EventsManagement />} />
+                <Route path="faculty-research" element={<FacultyResearch />} />
+                <Route path="faculty-participation" element={<FacultyParticipation />} />
+                <Route path="faculty-consultancy" element={<FacultyConsultancy />} />
               </Routes>
             </div>
           </main>
@@ -87,6 +93,9 @@ const StaffDashboard = () => {
 function OverviewPanel({ user }) {
   const [projCount, setProjCount] = useState(null);
   const [achCount, setAchCount] = useState(null);
+  const [partCount, setPartCount] = useState(null);
+  const [resCount, setResCount] = useState(null);
+  const [consCount, setConsCount] = useState(null);
   const [events, setEvents] = useState([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const displayName = formatDisplayName(user);
@@ -95,17 +104,26 @@ function OverviewPanel({ user }) {
     let mounted = true;
     (async () => {
       try {
-        const [p, a] = await Promise.all([
+        const [p, a, part, res, cons] = await Promise.all([
           apiClient.get("/projects/count?verified=true"),
           apiClient.get("/achievements/count?verified=true"),
+          apiClient.get("/faculty-participations/count"),
+          apiClient.get("/faculty-research/count"),
+          apiClient.get("/faculty-consultancy/count"),
         ]);
         if (!mounted) return;
         setProjCount(p?.count ?? 0);
         setAchCount(a?.count ?? 0);
+        setPartCount(part?.count ?? 0);
+        setResCount(res?.count ?? 0);
+        setConsCount(cons?.count ?? 0);
       } catch (e) {
         if (!mounted) return;
         setProjCount(0);
         setAchCount(0);
+        setPartCount(0);
+        setResCount(0);
+        setConsCount(0);
       }
     })();
     // load last 4 added events for staff overview (carousel)
@@ -143,27 +161,60 @@ function OverviewPanel({ user }) {
             <h2 className="text-base font-bold text-slate-100 mb-5">
               At a Glance
             </h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => (window.location.href = "/projects/approved")}
-                className="rounded-xl p-5 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-cyan-500 hover:border-cyan-400 hover:shadow-lg"
+                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-cyan-500 hover:border-cyan-400 hover:shadow-lg"
               >
                 <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                   Projects
                 </div>
-                <div className="mt-2 text-3xl font-extrabold text-slate-100">
+                <div className="mt-1 text-2xl font-extrabold text-slate-100">
                   {projCount === null ? "—" : projCount}
                 </div>
               </button>
               <button
                 onClick={() => (window.location.href = "/achievements/approved")}
-                className="rounded-xl p-5 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-fuchsia-500 hover:border-fuchsia-400 hover:shadow-lg"
+                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-fuchsia-500 hover:border-fuchsia-400 hover:shadow-lg"
               >
                 <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
                   Achievements
                 </div>
-                <div className="mt-2 text-3xl font-extrabold text-slate-100">
+                <div className="mt-1 text-2xl font-extrabold text-slate-100">
                   {achCount === null ? "—" : achCount}
+                </div>
+              </button>
+              <button
+                onClick={() => (window.location.href = "/staff/faculty-participation")}
+                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-emerald-500 hover:border-emerald-400 hover:shadow-lg"
+              >
+                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  Participation
+                </div>
+                <div className="mt-1 text-2xl font-extrabold text-slate-100">
+                  {partCount === null ? "—" : partCount}
+                </div>
+              </button>
+              <button
+                onClick={() => (window.location.href = "/staff/faculty-research")}
+                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-green-500 hover:border-green-400 hover:shadow-lg"
+              >
+                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  Research
+                </div>
+                <div className="mt-1 text-2xl font-extrabold text-slate-100">
+                  {resCount === null ? "—" : resCount}
+                </div>
+              </button>
+              <button
+                onClick={() => (window.location.href = "/staff/faculty-consultancy")}
+                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-amber-500 hover:border-amber-400 hover:shadow-lg"
+              >
+                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  Consultancy
+                </div>
+                <div className="mt-1 text-2xl font-extrabold text-slate-100">
+                  {consCount === null ? "—" : consCount}
                 </div>
               </button>
             </div>

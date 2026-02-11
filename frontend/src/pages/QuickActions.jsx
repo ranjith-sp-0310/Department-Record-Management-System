@@ -34,7 +34,7 @@ export default function QuickActions() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-white">
-      <div className="mx-auto max-w-6xl px-6 py-12">
+      <div className="mx-auto max-w-7xl w-full px-6 py-12">
         <PageHeader
           title="Quick Actions"
           subtitle="Get started with your most common tasks."

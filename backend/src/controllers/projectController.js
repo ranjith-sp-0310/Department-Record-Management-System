@@ -334,12 +334,22 @@ export async function listProjects(req, res) {
     const conditions = [];
     const params = [];
 
+    // Check if viewing verified/approved projects (not in management mode)
+    const isViewingVerified = verified === "true" || req.query.verification_status === "approved" || req.query.verification_status === "verified";
+
     // If not authenticated, only show verified projects
-    if (!requesterId) {
+    // Also show verified if explicitly requesting verified projects (but not if filtering by verification_status, which has its own logic)
+    if (!requesterId && !req.query.verification_status) {
+      conditions.push(`p.verified = true`);
+    } else if (verified === "true") {
+      // If verified=true is explicitly passed, enforce it
       conditions.push(`p.verified = true`);
     }
 
-    if (requesterRole === "staff" && requesterId) {
+    // Staff can only see projects for activity types they coordinate (only in management/verification mode)
+    // If staff is viewing verified/approved projects, no activity_type restriction needed
+    // Only apply filter when looking for unverified/pending projects
+    if (requesterRole === "staff" && requesterId && !isViewingVerified) {
       base += ` LEFT JOIN activity_coordinators ac ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(p.activity_type)) AND ac.staff_id = $${
         params.length + 1
       }`;

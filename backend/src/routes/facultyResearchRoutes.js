@@ -8,6 +8,7 @@ import {
   updateResearch,
   deleteResearch,
   listResearch,
+  getFacultyResearchCount,
 } from "../controllers/facultyResearchController.js";
 
 const router = express.Router();
@@ -19,6 +20,7 @@ router.use(requireAuth, requireRole(["staff", "admin"]));
 router.post("/", uploadFacultyProof.single("proof"), createResearch);
 router.put("/:id", uploadFacultyProof.single("proof"), updateResearch);
 router.delete("/:id", deleteResearch);
+router.get("/count", getFacultyResearchCount);
 router.get("/", listResearch);
 
 export default router;

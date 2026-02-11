@@ -24,6 +24,7 @@ export default function ProjectUpload() {
   const [submitting, setSubmitting] = useState(false);
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+  const [page, setPage] = useState(1);
   const [previewModal, setPreviewModal] = useState({ open: false, item: null });
 
   const loadProjects = async (retainExisting = false) => {
@@ -53,6 +54,15 @@ export default function ProjectUpload() {
     loadProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [projects.length]);
+
+  const perPage = 7;
+  const totalPages = Math.max(1, Math.ceil(projects.length / perPage));
+  const startIndex = (page - 1) * perPage;
+  const pagedProjects = projects.slice(startIndex, startIndex + perPage);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -399,7 +409,7 @@ export default function ProjectUpload() {
                   No projects yet.
                 </div>
               )}
-              {projects.map((p) => (
+              {pagedProjects.map((p) => (
                 <div
                   key={p.id}
                   className="rounded-lg border border-slate-200 p-4 dark:border-slate-700"
@@ -444,6 +454,29 @@ export default function ProjectUpload() {
                 </div>
               ))}
             </div>
+            {projects.length > perPage && (
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Prev
+                </button>
+                <span className="text-slate-600 dark:text-slate-300">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -198,9 +198,9 @@ export default function ProjectsManagement() {
                   <span className="font-semibold">Year:</span>{" "}
                   {p.academic_year || "—"}
                 </div>
-                {p.github_url && (
-                  <div>
-                    <span className="font-semibold">GitHub:</span>{" "}
+                <div>
+                  <span className="font-semibold">GitHub:</span>{" "}
+                  {p.github_url ? (
                     <a
                       href={p.github_url}
                       target="_blank"
@@ -209,8 +209,10 @@ export default function ProjectsManagement() {
                     >
                       {p.github_url}
                     </a>
-                  </div>
-                )}
+                  ) : (
+                    <span>—</span>
+                  )}
+                </div>
                 {Array.isArray(p.files) && p.files.length > 0 && (
                   <div className="mt-2">
                     <span className="font-semibold">Files:</span>
@@ -275,9 +277,9 @@ export default function ProjectsManagement() {
                 <span className="font-semibold">Year:</span>{" "}
                 {modal.item?.academic_year}
               </div>
-              {modal.item?.github_url && (
-                <div>
-                  <span className="font-semibold">GitHub:</span>{" "}
+              <div>
+                <span className="font-semibold">GitHub:</span>{" "}
+                {modal.item?.github_url ? (
                   <a
                     href={modal.item.github_url}
                     target="_blank"
@@ -286,8 +288,10 @@ export default function ProjectsManagement() {
                   >
                     {modal.item.github_url}
                   </a>
-                </div>
-              )}
+                ) : (
+                  <span>—</span>
+                )}
+              </div>
               {Array.isArray(modal.item?.files) &&
                 modal.item.files.length > 0 && (
                   <div className="mt-3">

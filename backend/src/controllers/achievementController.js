@@ -190,13 +190,21 @@ export async function listAchievements(req, res) {
     const cond = [];
     const params = [];
 
+    // Check if viewing verified/approved achievements (not in management mode)
+    const isViewingVerified = verified === "true" || req.query.status === "approved" || req.query.status === "verified";
+
     // If not authenticated, only show verified achievements
-    if (!requesterId) {
+    // Also show verified if explicitly requesting verified achievements (but not if filtering by status, which has its own logic)
+    if (!requesterId && !req.query.status) {
+      cond.push(`a.verified = true`);
+    } else if (verified === "true") {
+      // If verified=true is explicitly passed, enforce it
       cond.push(`a.verified = true`);
     }
 
     // If mine=true, require auth and only return requester's achievements
-    if (mine !== undefined && mine !== "false") {
+    const isMine = mine !== undefined && mine !== "false";
+    if (isMine) {
       if (!requesterId) {
         return res.status(401).json({ message: "Authentication required" });
       }
@@ -204,8 +212,10 @@ export async function listAchievements(req, res) {
       cond.push(`a.user_id=$${params.length}`);
     }
 
-    // Staff can only see achievements for activity types they coordinate
-    if (requesterRole === "staff" && requesterId) {
+    // Staff can only see achievements for activity types they coordinate (only in management/verification mode)
+    // If staff is viewing verified/approved achievements OR viewing own achievements (mine=true), no activity_type restriction needed
+    // Only apply filter when looking for unverified/pending achievements that aren't their own
+    if (requesterRole === "staff" && requesterId && !isViewingVerified && !isMine) {
       base += ` LEFT JOIN activity_coordinators ac ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(a.activity_type)) AND ac.staff_id = $${
         params.length + 1
       }`;
@@ -308,17 +318,29 @@ export async function getAchievementDetails(req, res) {
     if (!requesterId) {
       whereClause += " AND a.verified = true";
     } else if (requesterRole === "staff" && requesterId) {
-      const { rows: auth } = await pool.query(
-        `SELECT 1 FROM achievements a
-           JOIN activity_coordinators ac
-             ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(a.activity_type)) AND ac.staff_id = $1
-          WHERE a.id = $2`,
-        [requesterId, id]
+      const { rows: statusRows } = await pool.query(
+        "SELECT verified, verification_status FROM achievements WHERE id = $1",
+        [id]
       );
-      if (!auth.length) {
-        return res
-          .status(403)
-          .json({ message: "Not authorized to view this achievement" });
+      if (!statusRows.length) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      const isApproved =
+        statusRows[0].verified === true ||
+        statusRows[0].verification_status === "approved";
+      if (!isApproved) {
+        const { rows: auth } = await pool.query(
+          `SELECT 1 FROM achievements a
+             JOIN activity_coordinators ac
+               ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(a.activity_type)) AND ac.staff_id = $1
+            WHERE a.id = $2`,
+          [requesterId, id]
+        );
+        if (!auth.length) {
+          return res
+            .status(403)
+            .json({ message: "Not authorized to view this achievement" });
+        }
       }
     }
 

@@ -25,13 +25,14 @@ export default function Achievements() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [list, setList] = useState([]);
   const [loadingMine, setLoadingMine] = useState(false);
+  const [page, setPage] = useState(1);
   const [previewModal, setPreviewModal] = useState({ open: false, item: null });
 
   const loadMine = async () => {
     setLoadingMine(true);
     try {
-      // Pass user_id parameter to get only my achievements
-      const data = await apiClient.get(`/achievements?user_id=${user?.id}&limit=100`);
+      // Use mine=true to get only my achievements
+      const data = await apiClient.get('/achievements?mine=true&limit=100');
       setList(data.achievements || []);
     } catch (e) {
       console.error(e);
@@ -41,10 +42,19 @@ export default function Achievements() {
   };
 
   useEffect(() => {
-    if (user?.id) {
+    if (user) {
       loadMine();
     }
-  }, [user?.id]);
+  }, [user]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [list.length]);
+
+  const perPage = 10;
+  const totalPages = Math.max(1, Math.ceil(list.length / perPage));
+  const startIndex = (page - 1) * perPage;
+  const pagedList = list.slice(startIndex, startIndex + perPage);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -53,6 +63,10 @@ export default function Achievements() {
     setSuccess(false);
     try {
       // Allow all file types - no validation
+
+      if (!certificate || !eventPhotos || !proof) {
+        throw new Error("Please upload certificate, event photos, and other proofs.");
+      }
 
       const fd = new FormData();
       fd.append("title", form.title.trim());
@@ -289,28 +303,31 @@ export default function Achievements() {
                 maxSizeMB={25}
                 selectedFile={certificate}
                 onFileSelected={(f) => setCertificate(f)}
+                required={true}
               />
             </div>
 
             <div className="mt-4">
               <UploadDropzone
                 label="Upload Event Photos"
-                subtitle="Any file format - Optional"
+                subtitle="Any file format - Mandatory"
                 accept="*"
                 maxSizeMB={25}
                 selectedFile={eventPhotos}
                 onFileSelected={(f) => setEventPhotos(f)}
+                required={true}
               />
             </div>
 
             <div className="mt-4">
               <UploadDropzone
                 label="Upload Other Proofs"
-                subtitle="Any file format - Required"
+                subtitle="Any file format - Mandatory"
                 accept="*"
                 maxSizeMB={25}
                 selectedFile={proof}
                 onFileSelected={(f) => setProof(f)}
+                required={true}
               />
             </div>
 
@@ -356,7 +373,7 @@ export default function Achievements() {
                   No achievements yet.
                 </div>
               )}
-              {list.map((a) => {
+              {pagedList.map((a) => {
                 const isApproved =
                   (a.verification_status || "").toLowerCase() === "approved" ||
                   a.verified === true;
@@ -409,6 +426,29 @@ export default function Achievements() {
                 );
               })}
             </div>
+            {list.length > perPage && (
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Prev
+                </button>
+                <span className="text-slate-600 dark:text-slate-300">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="rounded-md bg-blue-600 px-3 py-1 text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

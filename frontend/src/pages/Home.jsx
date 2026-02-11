@@ -24,6 +24,11 @@ export default function Home({ hideAtAGlance = false }) {
   const [consultancyCount, setConsultancyCount] = useState(null);
   const [participationCount, setParticipationCount] = useState(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [staffProjCount, setStaffProjCount] = useState(null);
+  const [staffAchCount, setStaffAchCount] = useState(null);
+  const [staffPartCount, setStaffPartCount] = useState(null);
+  const [staffResCount, setStaffResCount] = useState(null);
+  const [staffConsCount, setStaffConsCount] = useState(null);
 
   // use shared events data
   // events is imported from ../data/events
@@ -57,10 +62,33 @@ export default function Home({ hideAtAGlance = false }) {
         if (mounted) setEvents([]);
       }
     })();
+
+    // Fetch staff-specific counts if user is staff (not admin)
+    if (user?.role === "staff") {
+      (async () => {
+        try {
+          const [p, a, part, res, cons] = await Promise.allSettled([
+            apiClient.get("/projects/count?verified=true"),
+            apiClient.get("/achievements/count?verified=true"),
+            apiClient.get("/faculty-participations/count"),
+            apiClient.get("/faculty-research/count"),
+            apiClient.get("/faculty-consultancy/count"),
+          ]);
+          if (!mounted) return;
+          setStaffProjCount(p.status === "fulfilled" ? p.value?.count ?? 0 : 0);
+          setStaffAchCount(a.status === "fulfilled" ? a.value?.count ?? 0 : 0);
+          setStaffPartCount(part.status === "fulfilled" ? part.value?.count ?? 0 : 0);
+          setStaffResCount(res.status === "fulfilled" ? res.value?.count ?? 0 : 0);
+          setStaffConsCount(cons.status === "fulfilled" ? cons.value?.count ?? 0 : 0);
+        } catch (_) {
+          if (!mounted) return;
+        }
+      })();
+    }
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [user?.role]);
 
   // Admin-only totals: students, staff, events
   useEffect(() => {
@@ -165,6 +193,74 @@ export default function Home({ hideAtAGlance = false }) {
               </Button>
             </div>
           </div>
+
+          {/* At a Glance Card for Staff Only */}
+          {user?.role === "staff" && (
+            <div className="md:col-span-1">
+              <div className="rounded-2xl border border-slate-700 bg-gradient-to-br from-slate-800 to-slate-900 p-6 shadow-xl h-full">
+                <h2 className="text-base font-bold text-slate-100 mb-4">
+                  At a Glance
+                </h2>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => nav("/projects/approved")}
+                    className="rounded-xl p-2 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-cyan-500 hover:border-cyan-400 hover:shadow-lg"
+                  >
+                    <div className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
+                      Projects
+                    </div>
+                    <div className="mt-1 text-lg font-extrabold text-slate-100">
+                      {staffProjCount === null ? "—" : staffProjCount}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => nav("/achievements/approved")}
+                    className="rounded-xl p-2 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-fuchsia-500 hover:border-fuchsia-400 hover:shadow-lg"
+                  >
+                    <div className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
+                      Achievements
+                    </div>
+                    <div className="mt-1 text-lg font-extrabold text-slate-100">
+                      {staffAchCount === null ? "—" : staffAchCount}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => nav("/faculty-participation-approved")}
+                    className="rounded-xl p-2 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-emerald-500 hover:border-emerald-400 hover:shadow-lg"
+                  >
+                    <div className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
+                      Participation
+                    </div>
+                    <div className="mt-1 text-lg font-extrabold text-slate-100">
+                      {staffPartCount === null ? "—" : staffPartCount}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => nav("/faculty-research-approved")}
+                    className="rounded-xl p-2 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-green-500 hover:border-green-400 hover:shadow-lg"
+                  >
+                    <div className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
+                      Research
+                    </div>
+                    <div className="mt-1 text-lg font-extrabold text-slate-100">
+                      {staffResCount === null ? "—" : staffResCount}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => nav("/faculty-consultancy-approved")}
+                    className="rounded-xl p-2 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-amber-500 hover:border-amber-400 hover:shadow-lg"
+                  >
+                    <div className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider">
+                      Consultancy
+                    </div>
+                    <div className="mt-1 text-lg font-extrabold text-slate-100">
+                      {staffConsCount === null ? "—" : staffConsCount}
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Top Achievers removed from hero - will be displayed with events */}
         </div>

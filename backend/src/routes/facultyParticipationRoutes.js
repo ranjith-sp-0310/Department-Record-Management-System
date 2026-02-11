@@ -7,7 +7,8 @@ import {
   createFacultyParticipation,
   updateFacultyParticipation,
   deleteFacultyParticipation,
-  listFacultyParticipations
+  listFacultyParticipations,
+  getFacultyParticipationsCount
 } from "../controllers/facultyParticipationController.js";
 
 const router = express.Router();
@@ -18,6 +19,7 @@ router.use(requireAuth, requireRole(["staff", "admin"]));
 router.post("/", uploadFacultyProof.single("proof"), createFacultyParticipation);
 router.put("/:id", uploadFacultyProof.single("proof"), updateFacultyParticipation);
 router.delete("/:id", deleteFacultyParticipation);
+router.get("/count", getFacultyParticipationsCount);
 router.get("/", listFacultyParticipations);
 
 export default router;
