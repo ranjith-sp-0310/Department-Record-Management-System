@@ -9,7 +9,7 @@ export default function AchievementsRecentGrid({ limit = 6 }) {
 
   const uploadsBase = useMemo(
     () => apiClient.baseURL.replace(/\/api$/, "") + "/uploads/",
-    []
+    [],
   );
 
   useEffect(() => {
@@ -18,15 +18,17 @@ export default function AchievementsRecentGrid({ limit = 6 }) {
     setError("");
     (async () => {
       try {
+        // Fetch more achievements to ensure we get enough after filtering for images
+        const fetchLimit = limit * 2;
         const data = await apiClient.get(
-          `/achievements?verified=true&order=latest&limit=${limit}`
+          `/achievements?verified=true&order=latest&limit=${fetchLimit}`,
         );
         if (!mounted) return;
         const rows = (data?.achievements || []).filter((a) => {
           const mime = (a.proof_mime || "").toLowerCase();
           return a.proof_filename && mime.startsWith("image/");
         });
-        setItems(rows);
+        setItems(rows.slice(0, limit));
       } catch (e) {
         if (!mounted) return;
         setError(e?.message || "Failed to load achievements");

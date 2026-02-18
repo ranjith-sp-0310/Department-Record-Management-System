@@ -62,7 +62,7 @@ export default function NotificationsBell() {
           const [pendingProj, pendingAch] = await Promise.all([
             apiClient.get(`/projects?verified=false&limit=20`),
             apiClient.get(
-              `/achievements?verified=false&status=pending&limit=50`
+              `/achievements?verified=false&status=pending&limit=50`,
             ),
           ]);
           const toCreatedTs = (item) => {
@@ -79,7 +79,7 @@ export default function NotificationsBell() {
           const [myProj, myAch] = await Promise.all([
             apiClient.get(`/projects?limit=20&mine=true`),
             apiClient.get(
-              `/achievements?limit=50${user?.id ? `&user_id=${user.id}` : ""}`
+              `/achievements?limit=50${user?.id ? `&user_id=${user.id}` : ""}`,
             ),
           ]);
           const toVerifiedTs = (item) => {
@@ -88,10 +88,10 @@ export default function NotificationsBell() {
           };
           const approvedMine = [
             ...(myProj.projects || []).filter(
-              (p) => (p.verification_status || "").toLowerCase() === "approved"
+              (p) => (p.verification_status || "").toLowerCase() === "approved",
             ),
             ...(myAch.achievements || []).filter(
-              (a) => (a.verification_status || "").toLowerCase() === "approved"
+              (a) => (a.verification_status || "").toLowerCase() === "approved",
             ),
           ];
           maxTs = Math.max(0, ...approvedMine.map(toVerifiedTs));
@@ -148,7 +148,7 @@ export default function NotificationsBell() {
         const [pendingProj, pendingAch] = await Promise.all([
           apiClient.get(`/projects?verified=false&limit=50`),
           apiClient.get(
-            `/achievements?verified=false&status=pending&limit=200`
+            `/achievements?verified=false&status=pending&limit=200`,
           ),
         ]);
         const projList = pendingProj.projects || [];
@@ -200,13 +200,13 @@ export default function NotificationsBell() {
         const [myProj, myAch] = await Promise.all([
           apiClient.get(`/projects?limit=20&mine=true`),
           apiClient.get(
-            `/achievements?limit=50${user?.id ? `&user_id=${user.id}` : ""}`
+            `/achievements?limit=50${user?.id ? `&user_id=${user.id}` : ""}`,
           ),
         ]);
         for (const p of myProj.projects || []) {
           if ((p.verification_status || "").toLowerCase() === "approved") {
             const ts = normalizeDate(
-              p.verified_at || p.updated_at || p.created_at
+              p.verified_at || p.updated_at || p.created_at,
             );
             if (ts >= weekAgo) {
               items.push({
@@ -226,7 +226,7 @@ export default function NotificationsBell() {
         for (const a of myAch.achievements || []) {
           if ((a.verification_status || "").toLowerCase() === "approved") {
             const ts = normalizeDate(
-              a.verified_at || a.updated_at || a.created_at
+              a.verified_at || a.updated_at || a.created_at,
             );
             if (ts >= weekAgo) {
               items.push({
@@ -293,7 +293,7 @@ export default function NotificationsBell() {
 
       {open && (
         <div className="absolute right-0 z-10 mt-2 w-80 rounded-xl border-2 border-[#87CEEB] bg-white shadow">
-          <div className="border-b border-[#87CEEB]/40 p-3 text-sm font-semibold">
+          <div className="border-b border-[#87CEEB]/40 p-3 text-sm font-semibold text-black">
             Notifications
           </div>
           <div className="p-2 space-y-1">

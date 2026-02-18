@@ -29,14 +29,14 @@ const Navbar = () => {
         user?.github_url,
       ];
       const filled = fields.filter(
-        (v) => typeof v === "string" && v.trim()
+        (v) => typeof v === "string" && v.trim(),
       ).length;
       return Math.round((filled / fields.length) * 100);
     }
     // For staff/admin, use existing logic
     const fields = [user?.fullName, user?.email, user?.phone, user?.rollNumber];
     const filled = fields.filter(
-      (v) => typeof v === "string" && v.trim()
+      (v) => typeof v === "string" && v.trim(),
     ).length;
     return Math.round((filled / fields.length) * 100);
   })();
@@ -50,7 +50,8 @@ const Navbar = () => {
 
   function goToDashboard() {
     if (user.role === "admin") nav("/admin");
-    else if (user.role === "staff") nav("/"); // Staff should see Home
+    else if (user.role === "staff")
+      nav("/"); // Staff should see Home
     else if (user.role === "student") nav("/student"); // Students go to Student Dashboard
   }
 
@@ -90,7 +91,10 @@ const Navbar = () => {
               <button
                 onClick={() => {
                   const element = document.getElementById("events");
-                  element?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  element?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
                 }}
                 className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
               >
@@ -99,7 +103,10 @@ const Navbar = () => {
               <button
                 onClick={() => {
                   const element = document.getElementById("projects");
-                  element?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  element?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
                 }}
                 className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
               >
@@ -108,7 +115,10 @@ const Navbar = () => {
               <button
                 onClick={() => {
                   const element = document.getElementById("achievements");
-                  element?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  element?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
                 }}
                 className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
               >
@@ -117,11 +127,116 @@ const Navbar = () => {
               <button
                 onClick={() => {
                   const element = document.getElementById("visualization");
-                  element?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  element?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
                 }}
                 className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
               >
                 Visualization
+              </button>
+            </div>
+          )}
+
+          {/* Student Navigation Links */}
+          {token && user?.role === "student" && (
+            <div className="hidden md:flex items-center gap-6">
+              <button
+                onClick={() => {
+                  nav("/");
+                  setTimeout(() => {
+                    const element = document.getElementById("events");
+                    element?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 100);
+                }}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Events
+              </button>
+              <button
+                onClick={() => {
+                  nav("/");
+                  setTimeout(() => {
+                    const element = document.getElementById("projects");
+                    element?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 100);
+                }}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Projects
+              </button>
+              <button
+                onClick={() => {
+                  nav("/");
+                  setTimeout(() => {
+                    const element = document.getElementById("achievements");
+                    element?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 100);
+                }}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Achievements
+              </button>
+            </div>
+          )}
+
+          {/* Staff Navigation Links */}
+          {token && user?.role === "staff" && (
+            <div className="hidden md:flex items-center gap-6">
+              <button
+                onClick={() => {
+                  nav("/");
+                  setTimeout(() => {
+                    const element = document.getElementById("events");
+                    element?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 100);
+                }}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Events
+              </button>
+              <button
+                onClick={() => {
+                  nav("/");
+                  setTimeout(() => {
+                    const element = document.getElementById("projects");
+                    element?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 100);
+                }}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Projects
+              </button>
+              <button
+                onClick={() => {
+                  nav("/");
+                  setTimeout(() => {
+                    const element = document.getElementById("achievements");
+                    element?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }, 100);
+                }}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Achievements
               </button>
             </div>
           )}
@@ -283,7 +398,7 @@ const Navbar = () => {
               </div>
             </div>
           </>,
-          document.body
+          document.body,
         )}
       <AvatarPicker
         open={avatarModalOpen}

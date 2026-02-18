@@ -427,7 +427,7 @@ export default function ReportGenerator() {
       <BackButton />
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          Staff Reports
+          Export Records
         </h1>
         <div className="text-sm text-slate-600 dark:text-slate-300">
           Generate Excel/CSV reports

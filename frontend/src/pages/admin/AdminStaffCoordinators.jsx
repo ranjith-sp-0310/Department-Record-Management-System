@@ -97,7 +97,7 @@ export default function AdminStaffCoordinators() {
 				<BackButton />
 				<div className="mb-8">
 					<h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">
-						Activity Coordinators
+						Staff Coordinators Mapping
 					</h1>
 					<p className="text-slate-600 dark:text-slate-300">
 						Map staff to achievement/project activity types (e.g., hackathon, paper presentation, coding competition).
@@ -191,7 +191,7 @@ export default function AdminStaffCoordinators() {
 					<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
 						<div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl p-6 w-full max-w-md">
 							<h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-4">
-								Assign Activity Coordinator
+								Assign Staff Coordinator
 							</h2>
 
 							<div className="mb-4">

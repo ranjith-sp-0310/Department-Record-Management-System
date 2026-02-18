@@ -30,6 +30,8 @@ app.use(
     origin: [
       "http://localhost:3000",
       "http://127.0.0.1:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3001",
       "http://localhost:4173",
       "http://127.0.0.1:4173",
       "http://localhost:5173",
@@ -38,7 +40,7 @@ app.use(
     credentials: false,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-session-token"],
-  })
+  }),
 );
 
 // simple route
@@ -53,7 +55,7 @@ app.use("/api/data-uploads", dataUploadRoutes);
 
 app.use(
   "/uploads",
-  express.static(path.resolve(process.env.FILE_STORAGE_PATH || "./uploads"))
+  express.static(path.resolve(process.env.FILE_STORAGE_PATH || "./uploads")),
 );
 
 // Serve exported files statically for easy download by staff/admin
@@ -113,7 +115,7 @@ async function ensureColumns() {
       // Add primary key constraint if one does not exist. If a PK already
       // exists this will fail; swallow that error.
       await pool.query(
-        "ALTER TABLE users ADD CONSTRAINT users_pkey PRIMARY KEY (id)"
+        "ALTER TABLE users ADD CONSTRAINT users_pkey PRIMARY KEY (id)",
       );
     } catch (e) {
       // ignore errors (constraint exists or other benign issues)
@@ -131,12 +133,12 @@ async function ensureColumns() {
         WHERE tc.table_name = 'users'
           AND kcu.column_name = 'id'
           AND tc.constraint_type IN ('PRIMARY KEY','UNIQUE')
-        LIMIT 1`
+        LIMIT 1`,
     );
     if (!hasIdKey.length) {
       try {
         await pool.query(
-          "ALTER TABLE users ADD CONSTRAINT users_id_unique UNIQUE (id)"
+          "ALTER TABLE users ADD CONSTRAINT users_id_unique UNIQUE (id)",
         );
       } catch (e) {
         // ignore if another process added it concurrently
@@ -145,59 +147,59 @@ async function ensureColumns() {
 
     // Ensure critical user columns exist
     await pool.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE",
     );
     // Normalize nulls to false where applicable
     await pool.query(
-      "UPDATE users SET is_verified = COALESCE(is_verified, FALSE) WHERE is_verified IS NULL"
+      "UPDATE users SET is_verified = COALESCE(is_verified, FALSE) WHERE is_verified IS NULL",
     );
 
     await pool.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
     );
     await pool.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20)"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20)",
     );
     await pool.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     );
 
     // Add optional profile fields if missing
     await pool.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
     );
 
     // Backfill full_name from profile_details where missing
     await pool.query(
-      "UPDATE users SET full_name = COALESCE(NULLIF(full_name, ''), NULLIF(profile_details->>'full_name', ''), NULLIF(TRIM((profile_details->>'first_name') || ' ' || (profile_details->>'last_name')), '')) WHERE (full_name IS NULL OR full_name = '')"
+      "UPDATE users SET full_name = COALESCE(NULLIF(full_name, ''), NULLIF(profile_details->>'full_name', ''), NULLIF(TRIM((profile_details->>'first_name') || ' ' || (profile_details->>'last_name')), '')) WHERE (full_name IS NULL OR full_name = '')",
     );
 
     // Optional profile fields
     await pool.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(30)"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(30)",
     );
     await pool.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS roll_number VARCHAR(50)"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS roll_number VARCHAR(50)",
     );
 
     // Add profile_details JSONB column for storing student registration info
     await pool.query(
-      "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_details JSONB"
+      "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_details JSONB",
     );
 
     // For existing users without profile_details, initialize with empty object
     await pool.query(
-      "UPDATE users SET profile_details = '{}' WHERE profile_details IS NULL AND role = 'student'"
+      "UPDATE users SET profile_details = '{}' WHERE profile_details IS NULL AND role = 'student'",
     );
 
     // If legacy schemas enforced NOT NULL on full_name, relax it so minimal inserts work
     const { rows: hasFullName } = await pool.query(
-      "SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='full_name'"
+      "SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='full_name'",
     );
     if (hasFullName.length) {
       try {
         await pool.query(
-          "ALTER TABLE users ALTER COLUMN full_name DROP NOT NULL"
+          "ALTER TABLE users ALTER COLUMN full_name DROP NOT NULL",
         );
       } catch (e) {
         // ignore if already nullable or other benign errors
@@ -206,14 +208,14 @@ async function ensureColumns() {
 
     // Add id to otp_verifications if missing
     await pool.query(
-      "ALTER TABLE otp_verifications ADD COLUMN IF NOT EXISTS id BIGSERIAL"
+      "ALTER TABLE otp_verifications ADD COLUMN IF NOT EXISTS id BIGSERIAL",
     );
     await pool.query(
-      "UPDATE otp_verifications SET id = DEFAULT WHERE id IS NULL"
+      "UPDATE otp_verifications SET id = DEFAULT WHERE id IS NULL",
     );
 
     console.log(
-      "Database columns ensured (users: id/is_verified/password_hash/role/created_at; otp_verifications: id)"
+      "Database columns ensured (users: id/is_verified/password_hash/role/created_at; otp_verifications: id)",
     );
   } catch (err) {
     console.error("Error ensuring columns", err);
@@ -231,7 +233,7 @@ ensureColumns()
     console.error("Startup migration error:", err);
     // still attempt to start server so humans can inspect logs, but warn
     app.listen(PORT, () =>
-      console.log(`Server listening on port ${PORT} (with migration warnings)`)
+      console.log(`Server listening on port ${PORT} (with migration warnings)`),
     );
   });
 

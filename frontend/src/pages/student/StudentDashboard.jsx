@@ -103,12 +103,12 @@ export default function StudentDashboard() {
       }
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -161,7 +161,8 @@ export default function StudentDashboard() {
             </h1>
 
             <p className="mx-auto md:mx-0 text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-2xl">
-              Your central hub for achievements, projects, and community engagement.
+              Your central hub for achievements, projects, and community
+              engagement.
             </p>
 
             <div className="pt-2 flex justify-center md:justify-start">
@@ -206,7 +207,9 @@ export default function StudentDashboard() {
                   onClick={() => nav("/projects/approved")}
                   className="rounded-xl p-4 sm:p-5 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-cyan-500 hover:border-cyan-400 hover:shadow-lg"
                 >
-                  <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Projects</div>
+                  <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                    Projects
+                  </div>
                   <div className="mt-2 text-2xl sm:text-3xl font-extrabold text-slate-100">
                     {projCount === null ? "—" : projCount}
                   </div>
@@ -229,7 +232,10 @@ export default function StudentDashboard() {
       </div>
 
       {/* Events slider and Leaderboard */}
-      <div className="w-full px-3 sm:px-4 md:px-6 lg:px-12 pb-8 sm:pb-10">
+      <div
+        id="events"
+        className="w-full px-3 sm:px-4 md:px-6 lg:px-12 pb-8 sm:pb-10"
+      >
         <div className="mb-5 sm:mb-6">
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
             Latest Events
@@ -240,9 +246,13 @@ export default function StudentDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
           <div className="md:col-span-2">
             {loadingEvents ? (
-              <div className="text-sm text-slate-600 p-8 bg-slate-50 dark:bg-slate-900/30 rounded-xl">Loading events...</div>
+              <div className="text-sm text-slate-600 p-8 bg-slate-50 dark:bg-slate-900/30 rounded-xl">
+                Loading events...
+              </div>
             ) : events.length === 0 ? (
-              <div className="text-sm text-slate-600 p-8 bg-slate-50 dark:bg-slate-900/30 rounded-xl">No events yet.</div>
+              <div className="text-sm text-slate-600 p-8 bg-slate-50 dark:bg-slate-900/30 rounded-xl">
+                No events yet.
+              </div>
             ) : (
               <EventsCarousel events={events} intervalMs={5000} />
             )}
@@ -254,7 +264,10 @@ export default function StudentDashboard() {
       </div>
 
       {/* Recent Projects grid (latest 6) */}
-      <div className="w-full px-3 sm:px-4 md:px-6 lg:px-12 pb-8 sm:pb-10">
+      <div
+        id="projects"
+        className="w-full px-3 sm:px-4 md:px-6 lg:px-12 pb-8 sm:pb-10"
+      >
         <div className="mb-5 sm:mb-6">
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
             Recent Projects
@@ -265,7 +278,10 @@ export default function StudentDashboard() {
       </div>
 
       {/* Recent Achievements grid (latest 6) */}
-      <div className="w-full px-3 sm:px-4 md:px-6 lg:px-12 pb-12 sm:pb-16">
+      <div
+        id="achievements"
+        className="w-full px-3 sm:px-4 md:px-6 lg:px-12 pb-12 sm:pb-16"
+      >
         <div className="mb-5 sm:mb-6">
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-800 dark:text-slate-100">
             Recent Achievements
