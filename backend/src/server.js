@@ -16,6 +16,7 @@ import studentProfileRoutes from "./routes/studentProfileRoutes.js";
 import addStudentsRoutes from "./routes/addStudentsRoutes.js";
 import bulkExportRoutes from "./routes/bulkExportRoutes.js";
 import activityCoordinatorRoutes from "./routes/activityCoordinatorRoutes.js";
+import announcementRoutes from "./routes/announcementRoutes.js";
 import pool from "./config/db.js";
 import fs from "fs";
 import path from "path";
@@ -52,6 +53,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/achievements", achievementRoutes);
 app.use("/api/data-uploads", dataUploadRoutes);
+app.use("/api/announcements", announcementRoutes);
 
 app.use(
   "/uploads",

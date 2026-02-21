@@ -395,9 +395,12 @@ export async function verifyAchievement(req, res) {
           .json({ message: "Not authorized to approve this achievement" });
       }
     }
+    const { comment } = req.body || {};
+    const verificationComment =
+      typeof comment === "string" && comment.trim() ? comment.trim() : null;
     await pool.query(
-      "UPDATE achievements SET verified = true, verification_status='approved', verified_by=$2, verified_at=NOW() WHERE id=$1",
-      [id, req.user?.id || null]
+      "UPDATE achievements SET verified = true, verification_status='approved', verification_comment=$3, verified_by=$2, verified_at=NOW() WHERE id=$1",
+      [id, req.user?.id || null, verificationComment]
     );
     return res.json({ message: "Achievement approved" });
   } catch (err) {
@@ -426,9 +429,12 @@ export async function rejectAchievement(req, res) {
           .json({ message: "Not authorized to reject this achievement" });
       }
     }
+    const { comment } = req.body || {};
+    const verificationComment =
+      typeof comment === "string" && comment.trim() ? comment.trim() : null;
     await pool.query(
-      "UPDATE achievements SET verified = false, verification_status='rejected', verified_by=$2, verified_at=NOW() WHERE id=$1",
-      [id, req.user?.id || null]
+      "UPDATE achievements SET verified = false, verification_status='rejected', verification_comment=$3, verified_by=$2, verified_at=NOW() WHERE id=$1",
+      [id, req.user?.id || null, verificationComment]
     );
     return res.json({ message: "Achievement rejected" });
   } catch (err) {

@@ -8,6 +8,7 @@ import {
   rejectAchievement,
   staffDashboard,
 } from "../controllers/staffController.js";
+import { createAnnouncement } from "../controllers/announcementController.js";
 import {
   createEvent,
   updateEvent,
@@ -31,6 +32,13 @@ router.post("/projects/:id/reject", rejectProject);
 // Achievements approval
 router.post("/achievements/:id/approve", approveAchievement);
 router.post("/achievements/:id/reject", rejectAchievement);
+
+// Targeted announcements to selected users
+router.post(
+  "/announcements",
+  upload.fields([{ name: "brochure", maxCount: 1 }]),
+  createAnnouncement
+);
 
 // Events management (staff can create events)
 router.post(

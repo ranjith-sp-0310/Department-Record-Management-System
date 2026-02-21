@@ -136,6 +136,12 @@ const Navbar = () => {
               >
                 Visualization
               </button>
+              <button
+                onClick={() => nav("/notifications")}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Notifications
+              </button>
             </div>
           )}
 
@@ -187,6 +193,12 @@ const Navbar = () => {
               >
                 Achievements
               </button>
+              <button
+                onClick={() => nav("/notifications")}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Notifications
+              </button>
             </div>
           )}
 
@@ -237,6 +249,12 @@ const Navbar = () => {
                 className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
               >
                 Achievements
+              </button>
+              <button
+                onClick={() => nav("/notifications")}
+                className="text-sm font-medium hover:bg-white/20 px-3 py-2 rounded-lg transition"
+              >
+                Notifications
               </button>
             </div>
           )}
@@ -358,6 +376,27 @@ const Navbar = () => {
                     />
                   </svg>
                   <span>Edit Profile</span>
+                </Link>
+                <Link
+                  to="/notifications"
+                  onClick={() => setSidebarOpen(false)}
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-slate-700 hover:bg-slate-100 outline-none focus:outline-none focus:ring-0 border-0"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-5 w-5"
+                  >
+                    <path
+                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0018 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span>Notifications</span>
                 </Link>
                 <button
                   type="button"

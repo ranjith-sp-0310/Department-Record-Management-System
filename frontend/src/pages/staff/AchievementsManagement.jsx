@@ -8,6 +8,7 @@ export default function AchievementsManagement() {
   const [expandedId, setExpandedId] = useState(null);
   const [modal, setModal] = useState({ open: false, item: null });
   const [view, setView] = useState("pending");
+  const [suggestion, setSuggestion] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -27,10 +28,14 @@ export default function AchievementsManagement() {
     load();
   }, []);
 
-  const approve = async (id) => {
+  const approve = async (id, comment) => {
     try {
       setBusyId(id);
-      const resp = await apiClient.post(`/achievements/${id}/verify`);
+      const payload =
+        typeof comment === "string" && comment.trim()
+          ? { comment: comment.trim() }
+          : {};
+      const resp = await apiClient.post(`/achievements/${id}/verify`, payload);
       if (resp) await load();
     } catch (e) {
       // optionally handle error
@@ -39,10 +44,14 @@ export default function AchievementsManagement() {
     }
   };
 
-  const reject = async (id) => {
+  const reject = async (id, comment) => {
     try {
       setBusyId(id);
-      const resp = await apiClient.post(`/achievements/${id}/reject`);
+      const payload =
+        typeof comment === "string" && comment.trim()
+          ? { comment: comment.trim() }
+          : {};
+      const resp = await apiClient.post(`/achievements/${id}/reject`, payload);
       if (resp) await load();
     } catch (e) {
       // optionally handle error
@@ -68,8 +77,24 @@ export default function AchievementsManagement() {
   const toggleView = (id) => {
     setExpandedId((prev) => (prev === id ? null : id));
   };
-  const openModal = (item) => setModal({ open: true, item });
-  const closeModal = () => setModal({ open: false, item: null });
+  const openModal = (item) => {
+    setSuggestion(item?.verification_comment || "");
+    setModal({ open: true, item });
+  };
+  const closeModal = () => {
+    setModal({ open: false, item: null });
+    setSuggestion("");
+  };
+  const approveFromModal = async () => {
+    if (!modal.item?.id) return;
+    await approve(modal.item.id, suggestion);
+    closeModal();
+  };
+  const rejectFromModal = async () => {
+    if (!modal.item?.id) return;
+    await reject(modal.item.id, suggestion);
+    closeModal();
+  };
 
   return (
     <div className="glitter-card rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -403,6 +428,34 @@ export default function AchievementsManagement() {
                   )}
                 </div>
               )}
+            </div>
+            <div className="mt-4">
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Suggestion to student (optional)
+              </label>
+              <textarea
+                value={suggestion}
+                onChange={(e) => setSuggestion(e.target.value)}
+                rows={3}
+                placeholder="Add a suggestion the student will see in notifications"
+                className="mt-2 w-full rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-800 focus:border-slate-400 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              />
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={rejectFromModal}
+                disabled={busyId === modal.item?.id}
+                className="rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white shadow hover:bg-red-700 disabled:opacity-50"
+              >
+                {busyId === modal.item?.id ? "Processing..." : "Reject"}
+              </button>
+              <button
+                onClick={approveFromModal}
+                disabled={busyId === modal.item?.id}
+                className="btn btn-primary btn-xs"
+              >
+                {busyId === modal.item?.id ? "Processing..." : "Approve"}
+              </button>
             </div>
           </div>
         </div>

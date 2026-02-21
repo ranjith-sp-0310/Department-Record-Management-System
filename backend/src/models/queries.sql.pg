@@ -195,6 +195,30 @@ ALTER TABLE achievements
   ADD COLUMN IF NOT EXISTS verified_by INTEGER,
   ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP;
 
+-- ==========================================================
+--  STAFF: targeted announcements
+-- ==========================================================
+CREATE TABLE IF NOT EXISTS staff_announcements (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  message TEXT NOT NULL,
+  brochure_file_id INTEGER,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_announcement_recipients (
+  id SERIAL PRIMARY KEY,
+  announcement_id INTEGER NOT NULL REFERENCES staff_announcements(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (announcement_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_staff_announcement_recipients_user
+  ON staff_announcement_recipients(user_id);
+
 -- Backfill verification_status to 'pending' where items are not verified and status is NULL
 UPDATE projects
 SET verification_status = 'pending'

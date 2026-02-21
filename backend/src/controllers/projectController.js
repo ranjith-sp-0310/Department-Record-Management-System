@@ -542,9 +542,12 @@ export async function verifyProject(req, res) {
           .json({ message: "Not authorized to approve this project" });
       }
     }
+    const { comment } = req.body || {};
+    const verificationComment =
+      typeof comment === "string" && comment.trim() ? comment.trim() : null;
     await pool.query(
-      "UPDATE projects SET verified = true, verification_status='approved', verified_by=$2, verified_at=NOW() WHERE id=$1",
-      [id, req.user?.id || null],
+      "UPDATE projects SET verified = true, verification_status='approved', verification_comment=$3, verified_by=$2, verified_at=NOW() WHERE id=$1",
+      [id, req.user?.id || null, verificationComment],
     );
     return res.json({ message: "Project approved" });
   } catch (err) {
@@ -575,9 +578,12 @@ export async function rejectProject(req, res) {
           .json({ message: "Not authorized to reject this project" });
       }
     }
+    const { comment } = req.body || {};
+    const verificationComment =
+      typeof comment === "string" && comment.trim() ? comment.trim() : null;
     await pool.query(
-      "UPDATE projects SET verified = false, verification_status='rejected', verified_by=$2, verified_at=NOW() WHERE id=$1",
-      [id, req.user?.id || null],
+      "UPDATE projects SET verified = false, verification_status='rejected', verification_comment=$3, verified_by=$2, verified_at=NOW() WHERE id=$1",
+      [id, req.user?.id || null, verificationComment],
     );
     return res.json({ message: "Project rejected" });
   } catch (err) {

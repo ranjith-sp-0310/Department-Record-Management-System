@@ -48,6 +48,12 @@ const AdminBulkExportPage = React.lazy(() =>
 const BulkExportPage = React.lazy(() =>
   import("./pages/staff/BulkExportPage")
 );
+const TopAchieversAnnouncement = React.lazy(() =>
+  import("./pages/staff/TopAchieversAnnouncement")
+);
+const StudentNotifications = React.lazy(() =>
+  import("./pages/student/StudentNotifications")
+);
 const AdminUsersManagement = React.lazy(() =>
   import("./pages/admin/AdminUsersManagement.jsx")
 );
@@ -489,6 +495,22 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={["staff", "admin"]}>
                 <BulkExportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/top-achievers-announcement"
+            element={
+              <ProtectedRoute allowedRoles={["staff", "admin"]}>
+                <TopAchieversAnnouncement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute allowedRoles={["student", "staff", "admin"]}>
+                <StudentNotifications />
               </ProtectedRoute>
             }
           />
