@@ -66,7 +66,7 @@ export const AuthProvider = ({ children }) => {
     if (!token || !user) return;
     try {
       const apiBase =
-        import.meta.env.VITE_API_BASE || "http://localhost:5000/api";
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
       const headers = {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
@@ -136,4 +136,3 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-

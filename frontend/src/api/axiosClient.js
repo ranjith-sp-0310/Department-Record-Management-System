@@ -1,9 +1,14 @@
-// Vite exposes env vars as import.meta.env, prefer VITE_API_BASE
+// Environment-driven API base URL (Vite exposes env vars as import.meta.env)
 const API_BASE_URL =
   (typeof import.meta !== "undefined" &&
     import.meta.env &&
-    import.meta.env.VITE_API_BASE) ||
+    import.meta.env.VITE_API_BASE_URL) ||
   "http://localhost:5000/api";
+
+// Log configuration in development
+if (import.meta.env?.VITE_APP_ENV === "development") {
+  console.log("[API Client] Base URL:", API_BASE_URL);
+}
 
 class ApiClient {
   constructor(baseURL) {
@@ -153,7 +158,7 @@ class ApiClient {
         throw new Error(
           isDataUpload
             ? "Please upload CSV or Excel"
-            : "Please upload PDF or image"
+            : "Please upload PDF or image",
         );
       }
       if (/only csv and excel allowed/i.test(msg)) {

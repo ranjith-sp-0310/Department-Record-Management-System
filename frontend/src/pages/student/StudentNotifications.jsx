@@ -7,7 +7,7 @@ import { useAuth } from "../../hooks/useAuth";
 const API_BASE_URL =
   (typeof import.meta !== "undefined" &&
     import.meta.env &&
-    import.meta.env.VITE_API_BASE) ||
+    import.meta.env.VITE_API_BASE_URL) ||
   "http://localhost:5000/api";
 const SERVER_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
@@ -42,7 +42,9 @@ export default function StudentNotifications() {
         const [ann, proj, ach] = await Promise.all([
           apiClient.get(`/announcements/mine?limit=100`),
           apiClient.get(`/projects?limit=50&mine=true`),
-          apiClient.get(`/achievements?limit=50${user?.id ? `&user_id=${user.id}` : ""}`),
+          apiClient.get(
+            `/achievements?limit=50${user?.id ? `&user_id=${user.id}` : ""}`,
+          ),
         ]);
 
         if (!mounted) return;
@@ -50,16 +52,16 @@ export default function StudentNotifications() {
         setAnnouncements(ann.announcements || []);
 
         const approvedProj = (proj.projects || []).filter(
-          (p) => (p.verification_status || "").toLowerCase() === "approved"
+          (p) => (p.verification_status || "").toLowerCase() === "approved",
         );
         const approvedAch = (ach.achievements || []).filter(
-          (a) => (a.verification_status || "").toLowerCase() === "approved"
+          (a) => (a.verification_status || "").toLowerCase() === "approved",
         );
         const rejectedProj = (proj.projects || []).filter(
-          (p) => (p.verification_status || "").toLowerCase() === "rejected"
+          (p) => (p.verification_status || "").toLowerCase() === "rejected",
         );
         const rejectedAch = (ach.achievements || []).filter(
-          (a) => (a.verification_status || "").toLowerCase() === "rejected"
+          (a) => (a.verification_status || "").toLowerCase() === "rejected",
         );
 
         const approvals = [
@@ -70,7 +72,9 @@ export default function StudentNotifications() {
             status: "approved",
             comment: p.verification_comment || "",
             by_name: p.verified_by_fullname || p.verified_by_email || "Staff",
-            timestamp: new Date(p.verified_at || p.updated_at || p.created_at).getTime(),
+            timestamp: new Date(
+              p.verified_at || p.updated_at || p.created_at,
+            ).getTime(),
           })),
           ...approvedAch.map((a) => ({
             type: "achievement_approved",
@@ -79,7 +83,9 @@ export default function StudentNotifications() {
             status: "approved",
             comment: a.verification_comment || "",
             by_name: a.verified_by_fullname || a.verified_by_email || "Staff",
-            timestamp: new Date(a.verified_at || a.updated_at || a.created_at).getTime(),
+            timestamp: new Date(
+              a.verified_at || a.updated_at || a.created_at,
+            ).getTime(),
           })),
         ].sort((x, y) => y.timestamp - x.timestamp);
 
@@ -91,7 +97,9 @@ export default function StudentNotifications() {
             status: "rejected",
             comment: p.verification_comment || "",
             by_name: p.verified_by_fullname || p.verified_by_email || "Staff",
-            timestamp: new Date(p.verified_at || p.updated_at || p.created_at).getTime(),
+            timestamp: new Date(
+              p.verified_at || p.updated_at || p.created_at,
+            ).getTime(),
           })),
           ...rejectedAch.map((a) => ({
             type: "achievement_rejected",
@@ -100,7 +108,9 @@ export default function StudentNotifications() {
             status: "rejected",
             comment: a.verification_comment || "",
             by_name: a.verified_by_fullname || a.verified_by_email || "Staff",
-            timestamp: new Date(a.verified_at || a.updated_at || a.created_at).getTime(),
+            timestamp: new Date(
+              a.verified_at || a.updated_at || a.created_at,
+            ).getTime(),
           })),
         ].sort((x, y) => y.timestamp - x.timestamp);
 
@@ -129,7 +139,7 @@ export default function StudentNotifications() {
     const updated = new Set(clearedNotifications);
     updated.add(notificationId);
     setClearedNotifications(updated);
-    
+
     // Save to localStorage
     if (user?.id) {
       const storageKey = `cleared_notifications_${user.id}`;
@@ -144,9 +154,9 @@ export default function StudentNotifications() {
       ...approvalNotifs.map((_, idx) => `approv-${idx}`),
       ...rejectionNotifs.map((_, idx) => `reject-${idx}`),
     ]);
-    
+
     setClearedNotifications(allIds);
-    
+
     // Save to localStorage
     if (user?.id) {
       const storageKey = `cleared_notifications_${user.id}`;
@@ -338,7 +348,10 @@ export default function StudentNotifications() {
                       notif.type === "project_approved"
                         ? `/projects/${notif.item_id}`
                         : `/achievements/${notif.item_id}`;
-                    const itemLabel = notif.type === "project_approved" ? "Project" : "Achievement";
+                    const itemLabel =
+                      notif.type === "project_approved"
+                        ? "Project"
+                        : "Achievement";
 
                     if (isCleared_) return null;
 
@@ -382,7 +395,9 @@ export default function StudentNotifications() {
                             </div>
                             <div className="text-sm text-slate-600 mt-2">
                               Approved by:{" "}
-                              <span className="font-medium">{notif.by_name}</span>
+                              <span className="font-medium">
+                                {notif.by_name}
+                              </span>
                             </div>
                           </div>
                           <div className="text-xs text-slate-500 whitespace-nowrap ml-4">
@@ -449,7 +464,10 @@ export default function StudentNotifications() {
                       notif.type === "project_rejected"
                         ? `/projects/${notif.item_id}`
                         : `/achievements/${notif.item_id}`;
-                    const itemLabel = notif.type === "project_rejected" ? "Project" : "Achievement";
+                    const itemLabel =
+                      notif.type === "project_rejected"
+                        ? "Project"
+                        : "Achievement";
 
                     if (isCleared_) return null;
 
@@ -493,7 +511,9 @@ export default function StudentNotifications() {
                             </div>
                             <div className="text-sm text-slate-600 mt-2">
                               Rejected by:{" "}
-                              <span className="font-medium">{notif.by_name}</span>
+                              <span className="font-medium">
+                                {notif.by_name}
+                              </span>
                             </div>
                           </div>
                           <div className="text-xs text-slate-500 whitespace-nowrap ml-4">

@@ -6,7 +6,43 @@ import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
 dotenv.config();
 
-const STORAGE_PATH = process.env.FILE_STORAGE_PATH || "./uploads";
+// ============================================================================
+// EXPLICIT FILE STORAGE CONFIGURATION
+// ============================================================================
+// Problem: Relative paths cause file loss, permission errors, inconsistencies
+// Solution: Explicit configuration with validation and permission checks
+// ============================================================================
+
+const NODE_ENV = process.env.NODE_ENV || "development";
+const IS_PRODUCTION = NODE_ENV === "production";
+
+// In production: FILE_STORAGE_PATH is REQUIRED (no fallback)
+// In development: Allow fallback to ./uploads for convenience
+let STORAGE_PATH;
+
+if (IS_PRODUCTION) {
+  if (!process.env.FILE_STORAGE_PATH) {
+    throw new Error(
+      "❌ FILE_STORAGE_PATH environment variable is REQUIRED in production. " +
+        "Use absolute paths for production deployments (e.g., /var/www/drms/uploads)",
+    );
+  }
+  STORAGE_PATH = process.env.FILE_STORAGE_PATH;
+  console.log(`📁 File storage (production): ${STORAGE_PATH}`);
+} else {
+  STORAGE_PATH = process.env.FILE_STORAGE_PATH || "./uploads";
+  if (!process.env.FILE_STORAGE_PATH) {
+    console.warn(
+      `⚠️  FILE_STORAGE_PATH not set, using default: ${STORAGE_PATH}`,
+    );
+  } else {
+    console.log(`📁 File storage (development): ${STORAGE_PATH}`);
+  }
+}
+
+// Resolve to absolute path
+STORAGE_PATH = path.resolve(STORAGE_PATH);
+
 const MAX_MB = Number(process.env.FILE_SIZE_LIMIT_MB || 50);
 const MAX_BYTES = MAX_MB * 1024 * 1024;
 const allowedTypes = (process.env.ALLOWED_FILE_TYPES || "")
@@ -23,9 +59,75 @@ const proofAllowedMimes = new Set([
   "image/pjpeg",
 ]);
 
-// ensure directory exists
-if (!fs.existsSync(STORAGE_PATH))
-  fs.mkdirSync(STORAGE_PATH, { recursive: true });
+// ============================================================================
+// DIRECTORY CREATION & PERMISSION VERIFICATION
+// ============================================================================
+
+/**
+ * Verify file storage directory exists and has correct permissions
+ * @throws {Error} If directory cannot be created or lacks permissions
+ */
+export function verifyFileStorage() {
+  try {
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(STORAGE_PATH)) {
+      console.log(`📁 Creating file storage directory: ${STORAGE_PATH}`);
+      fs.mkdirSync(STORAGE_PATH, { recursive: true, mode: 0o755 });
+    }
+
+    // Verify read permission
+    try {
+      fs.accessSync(STORAGE_PATH, fs.constants.R_OK);
+    } catch (err) {
+      throw new Error(
+        `❌ No READ permission for file storage: ${STORAGE_PATH}\n` +
+          `   Run: chmod +r ${STORAGE_PATH}`,
+      );
+    }
+
+    // Verify write permission
+    try {
+      fs.accessSync(STORAGE_PATH, fs.constants.W_OK);
+    } catch (err) {
+      throw new Error(
+        `❌ No WRITE permission for file storage: ${STORAGE_PATH}\n` +
+          `   Run: chmod +w ${STORAGE_PATH}`,
+      );
+    }
+
+    // Test write by creating a temporary file
+    const testFile = path.join(STORAGE_PATH, `.write-test-${Date.now()}`);
+    try {
+      fs.writeFileSync(testFile, "test", "utf8");
+      fs.unlinkSync(testFile);
+    } catch (err) {
+      throw new Error(
+        `❌ Cannot write to file storage directory: ${STORAGE_PATH}\n` +
+          `   Error: ${err.message}\n` +
+          `   Ensure the directory exists and has write permissions.`,
+      );
+    }
+
+    console.log(`✅ File storage verified: ${STORAGE_PATH}`);
+    console.log(`   Read/Write: OK`);
+    console.log(`   Max file size: ${MAX_MB} MB`);
+
+    return true;
+  } catch (err) {
+    if (IS_PRODUCTION) {
+      // In production, fail fast
+      throw err;
+    } else {
+      // In development, warn but allow startup
+      console.error(err.message);
+      console.warn("⚠️  File uploads may not work correctly.");
+      return false;
+    }
+  }
+}
+
+// Verify on module load
+verifyFileStorage();
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

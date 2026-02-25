@@ -17,34 +17,101 @@ import addStudentsRoutes from "./routes/addStudentsRoutes.js";
 import bulkExportRoutes from "./routes/bulkExportRoutes.js";
 import activityCoordinatorRoutes from "./routes/activityCoordinatorRoutes.js";
 import announcementRoutes from "./routes/announcementRoutes.js";
-import pool from "./config/db.js";
+import pool, { logPoolHealth, getPoolHealth } from "./config/db.js";
+import { verifyFileStorage } from "./config/upload.js";
 import fs from "fs";
 import path from "path";
 dotenv.config();
 
 const app = express();
 app.use(express.json());
-// CORS for local dev (Vite on 3000/4173)
-app.use(
-  cors({
-    origin: [
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      "http://localhost:3001",
-      "http://127.0.0.1:3001",
-      "http://localhost:4173",
-      "http://127.0.0.1:4173",
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-    ],
-    credentials: false,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "x-session-token"],
-  }),
-);
+
+// ============================================================================
+// CORS CONFIGURATION - Environment-Based Strategy
+// ============================================================================
+// Development: CORS enabled with specific origins
+// Production: CORS disabled (Nginx handles /api proxying)
+// ============================================================================
+
+const NODE_ENV = process.env.NODE_ENV || "development";
+const ENABLE_CORS = process.env.ENABLE_CORS !== "false"; // Default: enabled
+
+if (ENABLE_CORS) {
+  // CORS enabled - for development or environments without reverse proxy
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim())
+    : [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+      ];
+
+  app.use(
+    cors({
+      origin: corsOrigins,
+      credentials: false,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization", "x-session-token"],
+    }),
+  );
+
+  console.log(`🔓 CORS enabled for origins: ${corsOrigins.join(", ")}`);
+} else {
+  // CORS disabled - expecting Nginx or reverse proxy to handle cross-origin requests
+  console.log(
+    "🔒 CORS disabled - expecting reverse proxy (Nginx/Apache) to handle /api routing",
+  );
+}
 
 // simple route
 app.get("/", (req, res) => res.json({ message: "Auth RBAC OTP API" }));
+
+// Health check endpoint with database pool stats
+app.get("/health", async (req, res) => {
+  try {
+    // Quick database ping
+    const dbStart = Date.now();
+    await pool.query("SELECT 1");
+    const dbLatency = Date.now() - dbStart;
+
+    const poolHealth = getPoolHealth();
+
+    res.json({
+      status: "ok",
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: process.env.NODE_ENV || "development",
+      database: {
+        connected: true,
+        latency: `${dbLatency}ms`,
+        pool: {
+          total: poolHealth.totalCount,
+          idle: poolHealth.idleCount,
+          waiting: poolHealth.waitingCount,
+          health: poolHealth.health.status,
+        },
+      },
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: "error",
+      timestamp: new Date().toISOString(),
+      database: {
+        connected: false,
+        error: err.message,
+      },
+    });
+  }
+});
+
+// Detailed pool stats endpoint (admin only - add auth in production)
+app.get("/pool-stats", (req, res) => {
+  const poolHealth = getPoolHealth();
+  res.json(poolHealth);
+});
 
 app.use("/api/student/profile", studentProfileRoutes);
 app.use("/api/students", addStudentsRoutes);
@@ -54,10 +121,10 @@ app.use("/api/achievements", achievementRoutes);
 app.use("/api/data-uploads", dataUploadRoutes);
 app.use("/api/announcements", announcementRoutes);
 
-app.use(
-  "/uploads",
-  express.static(path.resolve(process.env.FILE_STORAGE_PATH || "./uploads")),
-);
+// Serve uploaded files statically
+// Use explicit FILE_STORAGE_PATH (no fallback in production)
+const FILE_STORAGE_PATH = process.env.FILE_STORAGE_PATH || "./uploads";
+app.use("/uploads", express.static(path.resolve(FILE_STORAGE_PATH)));
 
 // Serve exported files statically for easy download by staff/admin
 app.use("/exports", express.static(path.resolve("./exports")));
@@ -114,28 +181,61 @@ async function verifyDatabaseConnection() {
         "   psql -U <user> -d <database> -f backend/migrations/001_initial_schema.sql",
       );
     }
+
+    // Log pool health after successful connection
+    logPoolHealth();
   } catch (err) {
     console.error("❌ Database connection failed:", err.message);
+    console.error("   Error code:", err.code);
+    console.error(
+      "   Ensure PostgreSQL is running and credentials are correct",
+    );
     throw err;
   }
 }
 
 const PORT = process.env.PORT || 5000;
 
+// ============================================================================
+// APPLICATION STARTUP - Verify Database & File Storage
+// ============================================================================
 // Clean application startup - NO schema modifications at runtime
-verifyDatabaseConnection()
-  .then(() => {
+// 1. Verify database connectivity
+// 2. Verify file storage configuration
+// 3. Start HTTP server
+// ============================================================================
+
+async function startApplication() {
+  try {
+    // Step 1: Verify database connection
+    await verifyDatabaseConnection();
+
+    // Step 2: Verify file storage (already verified on module load, but re-check)
+    try {
+      verifyFileStorage();
+    } catch (err) {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error(`File storage verification failed: ${err.message}`);
+      }
+      console.warn(
+        "⚠️  File storage verification failed (non-fatal in development)",
+      );
+    }
+
+    // Step 3: Start server
     app.listen(PORT, () => {
       console.log(`🚀 Server listening on port ${PORT}`);
       console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`   API Base: http://localhost:${PORT}/api`);
     });
-  })
-  .catch((err) => {
+  } catch (err) {
     console.error("❌ Startup failed:", err.message);
-    console.error("   Ensure PostgreSQL is running and migrations are applied");
+    console.error("   Fix the error and restart the server");
     process.exit(1);
-  });
+  }
+}
+
+startApplication();
 
 // Global error handler to always return JSON (handles multer/file-filter errors too)
 // Keep this AFTER routes and server start to catch async route errors via next(err)
