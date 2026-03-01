@@ -108,9 +108,12 @@ export async function register(req, res) {
       }
     }
 
-    // generate OTP and save
+    // generate OTP and save (clear any existing OTPs for this email first)
     const otp = generateOTP();
     const expiresAt = getExpiryDate(OTP_EXPIRY_MIN);
+    await pool.query("DELETE FROM otp_verifications WHERE email=$1", [
+      emailLower,
+    ]);
     await pool.query(
       "INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)",
       [emailLower, otp, expiresAt],
@@ -151,12 +154,23 @@ export async function verifyOTP(req, res) {
   const otpClean = String(otp).trim();
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM otp_verifications WHERE email=$1 AND TRIM(otp_code)=$2",
-      [emailLower, otpClean],
+      "SELECT * FROM otp_verifications WHERE email=$1",
+      [emailLower],
     );
     if (!rows.length) return res.status(400).json({ message: "Invalid OTP" });
 
     const otpRow = rows[0];
+
+    if (otpRow.attempts >= 5) {
+      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+      return res.status(429).json({ message: "Too many failed attempts. Please request a new OTP." });
+    }
+
+    if (otpRow.otp_code.trim() !== otpClean) {
+      await pool.query("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id=$1", [otpRow.id]);
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
     if (new Date() > otpRow.expires_at) {
       await pool.query("DELETE FROM otp_verifications WHERE id=$1", [
         otpRow.id,
@@ -229,6 +243,9 @@ export async function login(req, res) {
       // User hasn't verified account yet: generate a fresh verification OTP and return it
       const otp = generateOTP();
       const expiresAt = getExpiryDate(OTP_EXPIRY_MIN);
+      await pool.query("DELETE FROM otp_verifications WHERE email=$1", [
+        emailLower,
+      ]);
       await pool.query(
         "INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)",
         [emailLower, otp, expiresAt],
@@ -302,6 +319,9 @@ export async function login(req, res) {
     // No valid session, generate OTP for login (two-step)
     const otp = generateOTP();
     const expiresAt = getExpiryDate(OTP_EXPIRY_MIN);
+    await pool.query("DELETE FROM otp_verifications WHERE email=$1", [
+      emailLower,
+    ]);
     await pool.query(
       "INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)",
       [emailLower, otp, expiresAt],
@@ -337,12 +357,23 @@ export async function loginVerifyOTP(req, res) {
   const otpClean = String(otp).trim();
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM otp_verifications WHERE email=$1 AND TRIM(otp_code)=$2",
-      [emailLower, otpClean],
+      "SELECT * FROM otp_verifications WHERE email=$1",
+      [emailLower],
     );
     if (!rows.length) return res.status(400).json({ message: "Invalid OTP" });
 
     const otpRow = rows[0];
+
+    if (otpRow.attempts >= 5) {
+      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+      return res.status(429).json({ message: "Too many failed attempts. Please request a new OTP." });
+    }
+
+    if (otpRow.otp_code.trim() !== otpClean) {
+      await pool.query("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id=$1", [otpRow.id]);
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
     if (new Date() > otpRow.expires_at) {
       await pool.query("DELETE FROM otp_verifications WHERE id=$1", [
         otpRow.id,
@@ -420,26 +451,37 @@ export async function initiateForgotPassword(req, res) {
     const { rows } = await pool.query("SELECT id FROM users WHERE email=$1", [
       emailLower,
     ]);
-    if (!rows.length)
-      return res.status(400).json({ message: "User not found" });
 
-    const otp = generateOTP();
-    const expiresAt = getExpiryDate(OTP_EXPIRY_MIN);
-    await pool.query(
-      "INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)",
-      [emailLower, otp, expiresAt],
-    );
+    const genericResponse = {
+      message: "If this email is registered, you will receive an OTP.",
+    };
 
-    await sendMail({
-      to: emailLower,
-      subject: "Password Reset OTP",
-      text: `Your password reset OTP is ${otp}. It expires in ${OTP_EXPIRY_MIN} minutes.`,
-    });
-    const devPayload =
-      process.env.RETURN_OTP === "true" || process.env.NODE_ENV !== "production"
-        ? { devOtp: otp }
-        : {};
-    return res.json({ message: "Password reset OTP sent", ...devPayload });
+    if (rows.length) {
+      const otp = generateOTP();
+      const expiresAt = getExpiryDate(OTP_EXPIRY_MIN);
+      await pool.query("DELETE FROM otp_verifications WHERE email=$1", [
+        emailLower,
+      ]);
+      await pool.query(
+        "INSERT INTO otp_verifications (email, otp_code, expires_at) VALUES ($1, $2, $3)",
+        [emailLower, otp, expiresAt]
+      );
+
+      await sendMail({
+        to: emailLower,
+        subject: "Password Reset OTP",
+        text: `Your password reset OTP is ${otp}. It expires in ${OTP_EXPIRY_MIN} minutes.`,
+      });
+
+      if (
+        process.env.RETURN_OTP === "true" ||
+        process.env.NODE_ENV !== "production"
+      ) {
+        genericResponse.devOtp = otp;
+      }
+    }
+
+    return res.json(genericResponse);
   } catch (err) {
     console.error("/auth/forgot error:", err);
     const payload =
@@ -470,12 +512,23 @@ export async function resetPassword(req, res) {
   const otpClean = String(otp).trim();
   try {
     const { rows } = await pool.query(
-      "SELECT * FROM otp_verifications WHERE email=$1 AND TRIM(otp_code)=$2",
-      [emailLower, otpClean],
+      "SELECT * FROM otp_verifications WHERE email=$1",
+      [emailLower],
     );
     if (!rows.length) return res.status(400).json({ message: "Invalid OTP" });
 
     const otpRow = rows[0];
+
+    if (otpRow.attempts >= 5) {
+      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+      return res.status(429).json({ message: "Too many failed attempts. Please request a new OTP." });
+    }
+
+    if (otpRow.otp_code.trim() !== otpClean) {
+      await pool.query("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id=$1", [otpRow.id]);
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
     if (new Date() > otpRow.expires_at) {
       await pool.query("DELETE FROM otp_verifications WHERE id=$1", [
         otpRow.id,
