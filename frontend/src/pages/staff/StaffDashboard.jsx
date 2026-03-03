@@ -153,7 +153,7 @@ function OverviewPanel({ user }) {
           <p className="text-slate-600 dark:text-slate-400 mt-3 text-base leading-relaxed">
             Use the side menu to manage projects, achievements and events.
           </p>
-          <div className="mt-4 h-1 w-20 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"></div>
+          <div className="mt-4 h-px w-16 bg-zinc-200 dark:bg-zinc-700 rounded-full"></div>
         </div>
 
         <div className="lg:col-span-1">
@@ -164,9 +164,9 @@ function OverviewPanel({ user }) {
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => (window.location.href = "/projects/approved")}
-                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-cyan-500 hover:border-cyan-400 hover:shadow-lg"
+                className="rounded-xl p-3 bg-white/5 hover:bg-white/10 transition-all duration-200 text-left border border-white/10 hover:border-blue-400/60"
               >
-                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Projects
                 </div>
                 <div className="mt-1 text-2xl font-extrabold text-slate-100">
@@ -175,9 +175,9 @@ function OverviewPanel({ user }) {
               </button>
               <button
                 onClick={() => (window.location.href = "/achievements/approved")}
-                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-fuchsia-500 hover:border-fuchsia-400 hover:shadow-lg"
+                className="rounded-xl p-3 bg-white/5 hover:bg-white/10 transition-all duration-200 text-left border border-white/10 hover:border-blue-400/60"
               >
-                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Achievements
                 </div>
                 <div className="mt-1 text-2xl font-extrabold text-slate-100">
@@ -186,9 +186,9 @@ function OverviewPanel({ user }) {
               </button>
               <button
                 onClick={() => (window.location.href = "/staff/faculty-participation")}
-                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-emerald-500 hover:border-emerald-400 hover:shadow-lg"
+                className="rounded-xl p-3 bg-white/5 hover:bg-white/10 transition-all duration-200 text-left border border-white/10 hover:border-blue-400/60"
               >
-                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Participation
                 </div>
                 <div className="mt-1 text-2xl font-extrabold text-slate-100">
@@ -197,9 +197,9 @@ function OverviewPanel({ user }) {
               </button>
               <button
                 onClick={() => (window.location.href = "/staff/faculty-research")}
-                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-green-500 hover:border-green-400 hover:shadow-lg"
+                className="rounded-xl p-3 bg-white/5 hover:bg-white/10 transition-all duration-200 text-left border border-white/10 hover:border-blue-400/60"
               >
-                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Research
                 </div>
                 <div className="mt-1 text-2xl font-extrabold text-slate-100">
@@ -208,9 +208,9 @@ function OverviewPanel({ user }) {
               </button>
               <button
                 onClick={() => (window.location.href = "/staff/faculty-consultancy")}
-                className="rounded-xl p-3 bg-slate-700/50 hover:bg-slate-700 transition-all duration-200 text-left border-2 border-amber-500 hover:border-amber-400 hover:shadow-lg"
+                className="rounded-xl p-3 bg-white/5 hover:bg-white/10 transition-all duration-200 text-left border border-white/10 hover:border-blue-400/60"
               >
-                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   Consultancy
                 </div>
                 <div className="mt-1 text-2xl font-extrabold text-slate-100">
@@ -226,10 +226,8 @@ function OverviewPanel({ user }) {
 
       <div>
         <div className="mb-5">
-          <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-            Latest Events
-          </h3>
-          <div className="h-1 w-16 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full mt-3"></div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-1">Latest</p>
+          <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Events</h3>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2">
@@ -250,10 +248,8 @@ function OverviewPanel({ user }) {
       {/* Recent Projects grid (latest 6) for staff */}
       <div>
         <div className="mb-5">
-          <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-            Recent Projects
-          </h3>
-          <div className="h-1 w-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full mt-3"></div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-1">Recent</p>
+          <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Projects</h3>
         </div>
         <ProjectsRecentGrid limit={6} />
       </div>
@@ -261,10 +257,8 @@ function OverviewPanel({ user }) {
       {/* Recent Achievements grid (latest 6) for staff */}
       <div className="pb-8">
         <div className="mb-5">
-          <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-            Recent Achievements
-          </h3>
-          <div className="h-1 w-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mt-3"></div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500 mb-1">Recent</p>
+          <h3 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Achievements</h3>
         </div>
         <AchievementsRecentGrid limit={6} />
       </div>
