@@ -184,47 +184,48 @@ export async function createProject(req, res) {
         created_by || null,
       ];
     }
-    const { rows } = await pool.query(insertSql, insertParams);
-    const project = rows[0];
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
-    // handle uploaded files if any
-    const insertedFiles = [];
-    for (const f of files) {
-      const fileType = detectFileTypeByField(f.fieldname);
-      const { rows: ins } = await pool.query(
-        `INSERT INTO project_files (project_id, filename, original_name, mime_type, size, file_type, uploaded_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          project.id,
-          f.filename,
-          f.originalname,
-          f.mimetype,
-          f.size,
-          fileType,
-          created_by || null,
-        ],
+      const { rows } = await client.query(insertSql, insertParams);
+      const project = rows[0];
+
+      // handle uploaded files if any
+      for (const f of files) {
+        const fileType = detectFileTypeByField(f.fieldname);
+        await client.query(
+          `INSERT INTO project_files (project_id, filename, original_name, mime_type, size, file_type, uploaded_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [project.id, f.filename, f.originalname, f.mimetype, f.size, fileType, created_by || null],
+        );
+      }
+
+      // Persist a summary of files into projects.files JSONB for easy viewing
+      const { rows: pf } = await client.query(
+        "SELECT id, filename, original_name, mime_type, size, file_type, uploaded_at FROM project_files WHERE project_id=$1 ORDER BY id ASC",
+        [project.id],
       );
-      if (ins && ins[0]) insertedFiles.push(ins[0]);
+      await client.query("UPDATE projects SET files = $2 WHERE id = $1", [
+        project.id,
+        JSON.stringify(pf),
+      ]);
+
+      await client.query("COMMIT");
+      return res
+        .status(201)
+        .json({ message: "Project created", project: { ...project, files: pf } });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-
-    // Persist a summary of files into projects.files JSONB for easy viewing
-    const { rows: pf } = await pool.query(
-      "SELECT id, filename, original_name, mime_type, size, file_type, uploaded_at FROM project_files WHERE project_id=$1 ORDER BY id ASC",
-      [project.id],
-    );
-    await pool.query("UPDATE projects SET files = $2 WHERE id = $1", [
-      project.id,
-      JSON.stringify(pf),
-    ]);
-
-    return res
-      .status(201)
-      .json({ message: "Project created", project: { ...project, files: pf } });
   } catch (err) {
     console.error(err);
     return res
       .status(500)
-      .json({ message: "Server error", error: err.message });
+      .json({ message: "Server error", ...(process.env.NODE_ENV !== "production" && { error: err.message }) });
   }
 }
 
@@ -297,38 +298,42 @@ export async function uploadFilesToProject(req, res) {
       }
     }
     const files = [...srsFiles, ...otherFiles];
-    for (const f of files) {
-      const fileType = detectFileTypeByField(f.fieldname);
-      await pool.query(
-        `INSERT INTO project_files (project_id, filename, original_name, mime_type, size, file_type, uploaded_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [
-          projectId,
-          f.filename,
-          f.originalname,
-          f.mimetype,
-          f.size,
-          fileType,
-          req.user?.id || null,
-        ],
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      for (const f of files) {
+        const fileType = detectFileTypeByField(f.fieldname);
+        await client.query(
+          `INSERT INTO project_files (project_id, filename, original_name, mime_type, size, file_type, uploaded_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [projectId, f.filename, f.originalname, f.mimetype, f.size, fileType, req.user?.id || null],
+        );
+      }
+
+      // Update projects.files JSONB summary
+      const { rows: pf } = await client.query(
+        "SELECT id, filename, original_name, mime_type, size, file_type, uploaded_at FROM project_files WHERE project_id=$1 ORDER BY id ASC",
+        [projectId],
       );
+      await client.query("UPDATE projects SET files = $2 WHERE id = $1", [
+        projectId,
+        JSON.stringify(pf),
+      ]);
+
+      await client.query("COMMIT");
+      return res.json({
+        message: "Files uploaded",
+        count: files.length,
+        files: pf,
+      });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-
-    // Update projects.files JSONB summary
-    const { rows: pf } = await pool.query(
-      "SELECT id, filename, original_name, mime_type, size, file_type, uploaded_at FROM project_files WHERE project_id=$1 ORDER BY id ASC",
-      [projectId],
-    );
-    await pool.query("UPDATE projects SET files = $2 WHERE id = $1", [
-      projectId,
-      JSON.stringify(pf),
-    ]);
-
-    return res.json({
-      message: "Files uploaded",
-      count: files.length,
-      files: pf,
-    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Server error" });

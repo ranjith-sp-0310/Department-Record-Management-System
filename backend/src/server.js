@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
@@ -19,11 +20,15 @@ import activityCoordinatorRoutes from "./routes/activityCoordinatorRoutes.js";
 import announcementRoutes from "./routes/announcementRoutes.js";
 import pool, { logPoolHealth, getPoolHealth } from "./config/db.js";
 import { verifyFileStorage } from "./config/upload.js";
+import { requireAuth } from "./middleware/authMiddleware.js";
+import { requireRole } from "./middleware/roleAuth.js";
+import { verifyToken } from "./utils/tokenUtils.js";
 import fs from "fs";
 import path from "path";
 dotenv.config();
 
 const app = express();
+app.use(helmet());
 app.use(express.json());
 
 // ============================================================================
@@ -107,8 +112,8 @@ app.get("/health", async (req, res) => {
   }
 });
 
-// Detailed pool stats endpoint (admin only - add auth in production)
-app.get("/pool-stats", (req, res) => {
+// Detailed pool stats endpoint (admin only)
+app.get("/pool-stats", requireAuth, requireRole(["admin"]), (req, res) => {
   const poolHealth = getPoolHealth();
   res.json(poolHealth);
 });
@@ -121,10 +126,32 @@ app.use("/api/achievements", achievementRoutes);
 app.use("/api/data-uploads", dataUploadRoutes);
 app.use("/api/announcements", announcementRoutes);
 
-// Serve uploaded files statically
-// Use explicit FILE_STORAGE_PATH (no fallback in production)
 const FILE_STORAGE_PATH = process.env.FILE_STORAGE_PATH || "./uploads";
-app.use("/uploads", express.static(path.resolve(FILE_STORAGE_PATH)));
+
+// Authenticated file serving — replaces the public /uploads static route.
+// Accepts Bearer token in Authorization header OR ?token= query param
+// (query param is needed for <img src> / <a href> browser-native requests).
+app.get("/api/files/:filename", (req, res) => {
+  const headerToken = req.headers.authorization?.split(" ")[1];
+  const queryToken = req.query.token;
+  const rawToken = headerToken || queryToken;
+  if (!rawToken) return res.status(401).json({ message: "No token" });
+  try {
+    verifyToken(rawToken);
+  } catch (err) {
+    const msg = err.name === "TokenExpiredError" ? "Token expired" : "Invalid token";
+    return res.status(401).json({ message: msg });
+  }
+  const uploadsDir = path.resolve(FILE_STORAGE_PATH);
+  const filePath = path.resolve(path.join(uploadsDir, req.params.filename));
+  if (!filePath.startsWith(uploadsDir + path.sep)) {
+    return res.status(400).json({ message: "Invalid file path" });
+  }
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ message: "File not found" });
+  }
+  res.sendFile(filePath);
+});
 
 // after app.use('/api/auth', authRoutes);
 app.use("/api/staff", staffRoutes);
@@ -220,7 +247,7 @@ async function startApplication() {
     }
 
     // Step 3: Start server
-    app.listen(PORT, () => {
+    app.listen(PORT, 0.0.0.0, () => {
       console.log(`🚀 Server listening on port ${PORT}`);
       console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`   API Base: http://localhost:${PORT}/api`);

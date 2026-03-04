@@ -126,14 +126,9 @@ export async function register(req, res) {
       text: `Your OTP is ${otp}. It expires in ${OTP_EXPIRY_MIN} minutes.`,
     });
 
-    const devPayload =
-      process.env.RETURN_OTP === "true" || process.env.NODE_ENV !== "production"
-        ? { devOtp: otp }
-        : {};
     return res.json({
       message: `OTP sent to ${emailLower}`,
       role,
-      ...devPayload,
     });
   } catch (err) {
     console.error("/auth/register error:", err);
@@ -166,16 +161,17 @@ export async function verifyOTP(req, res) {
       return res.status(429).json({ message: "Too many failed attempts. Please request a new OTP." });
     }
 
+    // Check expiry BEFORE checking the code so expired rows can never be
+    // brute-forced: a wrong code would otherwise leave the row alive past
+    // its expiry window with unlimited retry time.
+    if (new Date() > otpRow.expires_at) {
+      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
     if (otpRow.otp_code.trim() !== otpClean) {
       await pool.query("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id=$1", [otpRow.id]);
       return res.status(400).json({ message: "Invalid OTP" });
-    }
-
-    if (new Date() > otpRow.expires_at) {
-      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [
-        otpRow.id,
-      ]);
-      return res.status(400).json({ message: "OTP expired" });
     }
 
     // mark verified and remove otp
@@ -257,15 +253,9 @@ export async function login(req, res) {
         text: `Your verification OTP is ${otp}. It expires in ${OTP_EXPIRY_MIN} minutes.`,
       });
 
-      const devPayload =
-        process.env.RETURN_OTP === "true" ||
-        process.env.NODE_ENV !== "production"
-          ? { devOtp: otp }
-          : {};
       return res.json({
         message: "Please verify your account via OTP",
         needsVerification: true,
-        ...devPayload,
       });
     }
 
@@ -333,11 +323,7 @@ export async function login(req, res) {
       text: `Your login OTP is ${otp}. It expires in ${OTP_EXPIRY_MIN} minutes.`,
     });
 
-    const devPayload =
-      process.env.RETURN_OTP === "true" || process.env.NODE_ENV !== "production"
-        ? { devOtp: otp }
-        : {};
-    return res.json({ message: "Login OTP sent to email", ...devPayload });
+    return res.json({ message: "Login OTP sent to email" });
   } catch (err) {
     console.error("/auth/login error:", err);
     const payload =
@@ -369,16 +355,14 @@ export async function loginVerifyOTP(req, res) {
       return res.status(429).json({ message: "Too many failed attempts. Please request a new OTP." });
     }
 
+    if (new Date() > otpRow.expires_at) {
+      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
     if (otpRow.otp_code.trim() !== otpClean) {
       await pool.query("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id=$1", [otpRow.id]);
       return res.status(400).json({ message: "Invalid OTP" });
-    }
-
-    if (new Date() > otpRow.expires_at) {
-      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [
-        otpRow.id,
-      ]);
-      return res.status(400).json({ message: "OTP expired" });
     }
 
     await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
@@ -442,15 +426,68 @@ export async function loginVerifyOTP(req, res) {
   }
 }
 
+/**
+ * Validate a password-reset OTP without consuming it.
+ * Called by the frontend VerifyOtp step so that errors surface there
+ * (clear "Invalid OTP" / "OTP expired") instead of on the final reset screen.
+ * The OTP row is intentionally left in the DB so /auth/reset can consume it.
+ */
+export async function forgotVerifyOTP(req, res) {
+  const { email, otp } = req.body;
+  if (!email || !otp)
+    return res.status(400).json({ message: "Email and OTP required" });
+
+  const emailLower = String(email).trim().toLowerCase();
+  const otpClean = String(otp).trim();
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM otp_verifications WHERE email=$1",
+      [emailLower]
+    );
+    if (!rows.length) return res.status(400).json({ message: "Invalid OTP" });
+
+    const otpRow = rows[0];
+
+    if (otpRow.attempts >= 5) {
+      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+      return res.status(429).json({ message: "Too many failed attempts. Please request a new OTP." });
+    }
+
+    // Expiry before code — expired rows must not be brute-forced
+    if (new Date() > otpRow.expires_at) {
+      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    if (otpRow.otp_code.trim() !== otpClean) {
+      await pool.query(
+        "UPDATE otp_verifications SET attempts = attempts + 1 WHERE id=$1",
+        [otpRow.id]
+      );
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    // OTP is valid — leave the row in DB so /auth/reset can consume it
+    return res.json({ message: "OTP verified" });
+  } catch (err) {
+    console.error("/auth/forgot-verify error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+}
+
 export async function initiateForgotPassword(req, res) {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: "Email required" });
 
   const emailLower = email.toLowerCase();
   try {
-    const { rows } = await pool.query("SELECT id FROM users WHERE email=$1", [
-      emailLower,
-    ]);
+    // Only allow verified accounts to reset their password.
+    // Unverified accounts were never proven to own the email address, so
+    // issuing a reset OTP for them would be a bypass of email verification.
+    const { rows } = await pool.query(
+      "SELECT id FROM users WHERE email=$1 AND is_verified=true",
+      [emailLower],
+    );
 
     const genericResponse = {
       message: "If this email is registered, you will receive an OTP.",
@@ -473,12 +510,6 @@ export async function initiateForgotPassword(req, res) {
         text: `Your password reset OTP is ${otp}. It expires in ${OTP_EXPIRY_MIN} minutes.`,
       });
 
-      if (
-        process.env.RETURN_OTP === "true" ||
-        process.env.NODE_ENV !== "production"
-      ) {
-        genericResponse.devOtp = otp;
-      }
     }
 
     return res.json(genericResponse);
@@ -524,26 +555,32 @@ export async function resetPassword(req, res) {
       return res.status(429).json({ message: "Too many failed attempts. Please request a new OTP." });
     }
 
+    if (new Date() > otpRow.expires_at) {
+      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
     if (otpRow.otp_code.trim() !== otpClean) {
       await pool.query("UPDATE otp_verifications SET attempts = attempts + 1 WHERE id=$1", [otpRow.id]);
       return res.status(400).json({ message: "Invalid OTP" });
     }
 
-    if (new Date() > otpRow.expires_at) {
-      await pool.query("DELETE FROM otp_verifications WHERE id=$1", [
-        otpRow.id,
-      ]);
-      return res.status(400).json({ message: "OTP expired" });
-    }
-
     const hashed = await bcrypt.hash(newPassword, 10);
+    // Only reset password for verified accounts — unverified users must go
+    // through the registration + email-verification flow instead.
     const { rows: updated } = await pool.query(
-      "UPDATE users SET password_hash=$1 WHERE email=$2 RETURNING id",
+      "UPDATE users SET password_hash=$1 WHERE email=$2 AND is_verified=true RETURNING id",
       [hashed, emailLower],
     );
-    await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
-    await invalidateAllUserSessions(updated[0].id);
 
+    // Consume the OTP regardless of outcome to prevent replay
+    await pool.query("DELETE FROM otp_verifications WHERE id=$1", [otpRow.id]);
+
+    if (!updated.length) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    await invalidateAllUserSessions(updated[0].id);
     return res.json({ message: "Password updated" });
   } catch (err) {
     console.error(err);
