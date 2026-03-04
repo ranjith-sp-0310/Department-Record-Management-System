@@ -46,22 +46,6 @@ export async function createAchievement(req, res) {
 
     // Accept all file types - no validation
 
-    // Helper function to insert file and return id
-    const insertFileRecord = async (file, fileType) => {
-      const ins = await pool.query(
-        "INSERT INTO project_files (filename, original_name, mime_type, size, file_type, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
-        [
-          file.filename,
-          file.originalname,
-          file.mimetype,
-          file.size,
-          fileType,
-          userId,
-        ],
-      );
-      return ins.rows[0].id;
-    };
-
     // duplicate check for same user — must run before any file writes
     const dup = await pool.query(
       "SELECT id FROM achievements WHERE user_id=$1 AND title=$2 AND date_of_award=$3",
@@ -95,48 +79,31 @@ export async function createAchievement(req, res) {
       }
     }
 
-    // Insert all files (after duplicate check passes)
-    const proofFileId = await insertFileRecord(proofFile, "proof");
-    let certificateFileId = null;
-    if (certificateFile) {
-      certificateFileId = await insertFileRecord(
-        certificateFile,
-        "certificate",
-      );
-    }
-    let eventPhotosFileId = null;
-    if (eventPhotosFile) {
-      eventPhotosFileId = await insertFileRecord(
-        eventPhotosFile,
-        "event_photos",
-      );
-    }
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
 
+      const insertFileRecord = async (file, fileType) => {
+        const ins = await client.query(
+          "INSERT INTO project_files (filename, original_name, mime_type, size, file_type, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
+          [file.filename, file.originalname, file.mimetype, file.size, fileType, userId],
+        );
+        return ins.rows[0].id;
+      };
 
-    let insertSql =
-      "INSERT INTO achievements (user_id, title, issuer, date_of_award, proof_file_id, certificate_file_id, event_photos_file_id, date, event_id, event_name, activity_type, name, prize_amount, position) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *";
-    let params = [
-      userId,
-      title.trim(),
-      issuer.trim(),
-      date_of_award || null,
-      proofFileId,
-      certificateFileId,
-      eventPhotosFileId,
-      date || null,
-      event_id ? Number(event_id) : null,
-      eventNameVal,
-      activityType,
-      name.trim(),
-      prizeAmount,
-      pos,
-    ];
+      const proofFileId = await insertFileRecord(proofFile, "proof");
+      let certificateFileId = null;
+      if (certificateFile) {
+        certificateFileId = await insertFileRecord(certificateFile, "certificate");
+      }
+      let eventPhotosFileId = null;
+      if (eventPhotosFile) {
+        eventPhotosFileId = await insertFileRecord(eventPhotosFile, "event_photos");
+      }
 
-    // If staff/admin, auto-approve (verified=true)
-    if (userRole === "staff" || userRole === "admin") {
-      insertSql =
-        "INSERT INTO achievements (user_id, title, issuer, date_of_award, proof_file_id, certificate_file_id, event_photos_file_id, date, event_id, event_name, activity_type, name, prize_amount, position, verified, verification_status, verified_by, verified_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, true, 'approved', $15, NOW()) RETURNING *";
-      params = [
+      let insertSql =
+        "INSERT INTO achievements (user_id, title, issuer, date_of_award, proof_file_id, certificate_file_id, event_photos_file_id, date, event_id, event_name, activity_type, name, prize_amount, position) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *";
+      let params = [
         userId,
         title.trim(),
         issuer.trim(),
@@ -151,19 +118,48 @@ export async function createAchievement(req, res) {
         name.trim(),
         prizeAmount,
         pos,
-        userId,
       ];
-    }
-    const result = await pool.query(insertSql, params);
 
-    // optional: auto-post to community if requested (left as TODO; integrate with posts endpoint)
-    if (post_to_community === "true") {
-      // TODO: insert into posts table referencing achievement id
-    }
+      // If staff/admin, auto-approve (verified=true)
+      if (userRole === "staff" || userRole === "admin") {
+        insertSql =
+          "INSERT INTO achievements (user_id, title, issuer, date_of_award, proof_file_id, certificate_file_id, event_photos_file_id, date, event_id, event_name, activity_type, name, prize_amount, position, verified, verification_status, verified_by, verified_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, true, 'approved', $15, NOW()) RETURNING *";
+        params = [
+          userId,
+          title.trim(),
+          issuer.trim(),
+          date_of_award || null,
+          proofFileId,
+          certificateFileId,
+          eventPhotosFileId,
+          date || null,
+          event_id ? Number(event_id) : null,
+          eventNameVal,
+          activityType,
+          name.trim(),
+          prizeAmount,
+          pos,
+          userId,
+        ];
+      }
 
-    return res
-      .status(201)
-      .json({ message: "Achievement created", achievement: result.rows[0] });
+      const result = await client.query(insertSql, params);
+
+      // optional: auto-post to community if requested (left as TODO; integrate with posts endpoint)
+      if (post_to_community === "true") {
+        // TODO: insert into posts table referencing achievement id
+      }
+
+      await client.query("COMMIT");
+      return res
+        .status(201)
+        .json({ message: "Achievement created", achievement: result.rows[0] });
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Server error" });
