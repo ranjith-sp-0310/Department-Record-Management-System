@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import apiClient from "../../api/axiosClient";
+import { getFileUrl } from "../../utils/fileUrl";
 
 export default function AchievementsManagement() {
   const [items, setItems] = useState([]);
