@@ -69,8 +69,8 @@ export default function NotificationsBell() {
 
         let maxTs = 0;
         let announcements = [];
-        if (role === "staff" || role === "admin") {
-          // For staff/admin, new submissions awaiting approval
+        if (role === "staff") {
+          // For staff, new submissions awaiting approval
           const [pendingProj, pendingAch] = await Promise.all([
             apiClient.get(`/projects?verified=false&limit=20`),
             apiClient.get(
@@ -264,8 +264,8 @@ export default function NotificationsBell() {
       };
       const items = [];
 
-      if (role === "staff" || role === "admin") {
-        // Pending approvals summary for staff/admin
+      if (role === "staff") {
+        // Pending approvals summary for staff
         const [pendingProj, pendingAch] = await Promise.all([
           apiClient.get(`/projects?verified=false&limit=50`),
           apiClient.get(
