@@ -5,6 +5,7 @@ import path from "path";
 import fs from "fs";
 import logger from "../utils/logger.js";
 import { QueryBuilder } from "../utils/queryBuilder.js";
+import { reviewProject, ReviewError } from "../services/reviewService.js";
 
 // Note: 'upload' is multer instance exported above
 // We'll expose middleware usage in routes.
@@ -564,66 +565,28 @@ export async function getProjectDetails(req, res) {
 }
 
 export async function verifyProject(req, res) {
-  // Staff approves a project
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || Number.isNaN(id))
+    return res.status(400).json({ message: "Invalid project id" });
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || Number.isNaN(id))
-      return res.status(400).json({ message: "Invalid project id" });
-    const requesterId = req.user?.id;
-    const { rows: auth } = await pool.query(
-      `SELECT 1 FROM projects p
-        JOIN activity_coordinators ac
-          ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(p.activity_type)) AND ac.staff_id = $1
-       WHERE p.id = $2`,
-      [requesterId, id],
-    );
-    if (!auth.length) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to approve this project" });
-    }
-    const { comment } = req.body || {};
-    const verificationComment =
-      typeof comment === "string" && comment.trim() ? comment.trim() : null;
-    await pool.query(
-      "UPDATE projects SET verified = true, verification_status='approved', verification_comment=$3, verified_by=$2, verified_at=NOW() WHERE id=$1",
-      [id, req.user?.id || null, verificationComment],
-    );
-    return res.json({ message: "Project approved" });
+    const result = await reviewProject(id, req.user?.id, "approve", req.body?.comment, req.correlationId);
+    return res.json(result);
   } catch (err) {
+    if (err instanceof ReviewError) return res.status(err.status).json({ message: err.message });
     logger.error("Project controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
 
 export async function rejectProject(req, res) {
-  // Staff rejects a project
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || Number.isNaN(id))
+    return res.status(400).json({ message: "Invalid project id" });
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || Number.isNaN(id))
-      return res.status(400).json({ message: "Invalid project id" });
-    const requesterId = req.user?.id;
-    const { rows: auth } = await pool.query(
-      `SELECT 1 FROM projects p
-        JOIN activity_coordinators ac
-          ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(p.activity_type)) AND ac.staff_id = $1
-       WHERE p.id = $2`,
-      [requesterId, id],
-    );
-    if (!auth.length) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to reject this project" });
-    }
-    const { comment } = req.body || {};
-    const verificationComment =
-      typeof comment === "string" && comment.trim() ? comment.trim() : null;
-    await pool.query(
-      "UPDATE projects SET verified = false, verification_status='rejected', verification_comment=$3, verified_by=$2, verified_at=NOW() WHERE id=$1",
-      [id, req.user?.id || null, verificationComment],
-    );
-    return res.json({ message: "Project rejected" });
+    const result = await reviewProject(id, req.user?.id, "reject", req.body?.comment, req.correlationId);
+    return res.json(result);
   } catch (err) {
+    if (err instanceof ReviewError) return res.status(err.status).json({ message: err.message });
     logger.error("Project controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }

@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import logger from "../utils/logger.js";
 import { QueryBuilder } from "../utils/queryBuilder.js";
+import { reviewAchievement, ReviewError } from "../services/reviewService.js";
 
 // create achievement (students)
 export async function createAchievement(req, res) {
@@ -390,30 +391,16 @@ export async function getAchievementDetails(req, res) {
 
 export async function verifyAchievement(req, res) {
   try {
-    const id = Number(req.params.id);
-    const requesterId = req.user?.id;
-    // Staff can only verify achievements for activity types they coordinate
-    const { rows: auth } = await pool.query(
-      `SELECT 1 FROM achievements a
-        JOIN activity_coordinators ac
-          ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(a.activity_type)) AND ac.staff_id = $1
-       WHERE a.id = $2`,
-      [requesterId, id],
+    const result = await reviewAchievement(
+      Number(req.params.id),
+      req.user?.id,
+      "approve",
+      req.body?.comment,
+      req.correlationId,
     );
-    if (!auth.length) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to approve this achievement" });
-    }
-    const { comment } = req.body || {};
-    const verificationComment =
-      typeof comment === "string" && comment.trim() ? comment.trim() : null;
-    await pool.query(
-      "UPDATE achievements SET verified = true, verification_status='approved', verification_comment=$3, verified_by=$2, verified_at=NOW() WHERE id=$1",
-      [id, req.user?.id || null, verificationComment],
-    );
-    return res.json({ message: "Achievement approved" });
+    return res.json(result);
   } catch (err) {
+    if (err instanceof ReviewError) return res.status(err.status).json({ message: err.message });
     logger.error("Achievement controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
@@ -421,30 +408,16 @@ export async function verifyAchievement(req, res) {
 
 export async function rejectAchievement(req, res) {
   try {
-    const id = Number(req.params.id);
-    const requesterId = req.user?.id;
-    // Staff can only reject achievements for activity types they coordinate
-    const { rows: auth } = await pool.query(
-      `SELECT 1 FROM achievements a
-        JOIN activity_coordinators ac
-          ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(a.activity_type)) AND ac.staff_id = $1
-       WHERE a.id = $2`,
-      [requesterId, id],
+    const result = await reviewAchievement(
+      Number(req.params.id),
+      req.user?.id,
+      "reject",
+      req.body?.comment,
+      req.correlationId,
     );
-    if (!auth.length) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to reject this achievement" });
-    }
-    const { comment } = req.body || {};
-    const verificationComment =
-      typeof comment === "string" && comment.trim() ? comment.trim() : null;
-    await pool.query(
-      "UPDATE achievements SET verified = false, verification_status='rejected', verification_comment=$3, verified_by=$2, verified_at=NOW() WHERE id=$1",
-      [id, req.user?.id || null, verificationComment],
-    );
-    return res.json({ message: "Achievement rejected" });
+    return res.json(result);
   } catch (err) {
+    if (err instanceof ReviewError) return res.status(err.status).json({ message: err.message });
     logger.error("Achievement controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
