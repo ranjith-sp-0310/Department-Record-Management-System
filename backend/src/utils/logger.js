@@ -4,6 +4,13 @@ import { ecsFormat } from "@elastic/ecs-winston-format";
 
 const NODE_ENV = process.env.NODE_ENV || "development";
 
+// Prefer the version npm injects at startup; fall back to the env var or a
+// sentinel so it's obvious when neither is set rather than silently logging "1.0.0".
+const SERVICE_VERSION =
+  process.env.npm_package_version ||
+  process.env.SERVICE_VERSION ||
+  "unknown";
+
 // ECS (Elastic Common Schema) format — produces structured JSON that Logstash,
 // Filebeat, and the Elastic Stack can ingest without any additional mapping.
 // convertReqRes: true makes the formatter automatically map Express req/res
@@ -13,7 +20,7 @@ const logger = createLogger({
   format: ecsFormat({ convertReqRes: true }),
   defaultMeta: {
     "service.name": process.env.SERVICE_NAME || "drms-backend",
-    "service.version": "1.0.0",
+    "service.version": SERVICE_VERSION,
     "service.environment": NODE_ENV,
   },
   transports: [
