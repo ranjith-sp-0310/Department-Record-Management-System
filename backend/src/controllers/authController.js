@@ -7,7 +7,7 @@ import dotenv from "dotenv";
 import { signToken } from "../utils/tokenUtils.js";
 import {
   createSession,
-  hasValidSession,
+  getUserActiveSessions,
   invalidateAllUserSessions,
 } from "../utils/sessionUtils.js";
 import logger from "../utils/logger.js";
@@ -194,8 +194,12 @@ export async function verifyOTP(req, res) {
       ]);
       user.role = "admin";
     }
+    const regSession = await createSession(user.id, {
+      userAgent: req.get("user-agent"),
+      ipAddress: req.ip,
+    });
     const token = signToken(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, sid: regSession.session_token },
       "6h",
     );
     const profile = user.profile_details || {};
@@ -261,9 +265,10 @@ export async function login(req, res) {
     }
 
     // Check if user has a valid session (90-day session-based login)
-    const userHasValidSession = await hasValidSession(user.id);
-    if (userHasValidSession) {
+    const activeSessions = await getUserActiveSessions(user.id);
+    if (activeSessions.length > 0) {
       // User has valid session, skip OTP and return token directly
+      const latestSession = activeSessions[0]; // ordered by last_accessed_at DESC
       // If this email is listed in ADMIN_EMAILS, ensure role is admin both in DB and token
       if (ADMIN_EMAILS.includes(emailLower) && user.role !== "admin") {
         await pool.query("UPDATE users SET role='admin' WHERE email=$1", [
@@ -272,7 +277,7 @@ export async function login(req, res) {
         user.role = "admin";
       }
       const token = signToken(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, email: user.email, role: user.role, sid: latestSession.session_token },
         "6h",
       );
       const profile = user.profile_details || {};
@@ -387,7 +392,7 @@ export async function loginVerifyOTP(req, res) {
       userAgent: req.get("user-agent"),
       ipAddress: req.ip,
     };
-    await createSession(user.id, deviceInfo);
+    const session = await createSession(user.id, deviceInfo);
 
     // Fetch student profile data if role is student
     let studentProfile = {};
@@ -402,7 +407,7 @@ export async function loginVerifyOTP(req, res) {
     }
 
     const token = signToken(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, sid: session.session_token },
       "6h",
     );
     const profile = user.profile_details || {};
@@ -728,12 +733,7 @@ export async function updateProfilePhoto(req, res) {
  */
 export async function logout(req, res) {
   try {
-    const sessionToken = req.headers["x-session-token"];
-
-    if (sessionToken) {
-      await invalidateAllUserSessions(req.user.id);
-    }
-
+    await invalidateAllUserSessions(req.user.id);
     return res.json({ message: "Logged out successfully" });
   } catch (err) {
     logger.error("Auth logout error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
