@@ -7,9 +7,10 @@ import dotenv from "dotenv";
 import { signToken } from "../utils/tokenUtils.js";
 import {
   createSession,
-  hasValidSession,
+  getUserActiveSessions,
   invalidateAllUserSessions,
 } from "../utils/sessionUtils.js";
+import logger from "../utils/logger.js";
 dotenv.config();
 
 const OTP_EXPIRY_MIN = Number(process.env.OTP_EXPIRY_MIN || 5);
@@ -131,7 +132,7 @@ export async function register(req, res) {
       role,
     });
   } catch (err) {
-    console.error("/auth/register error:", err);
+    logger.error("Auth register error", { err, "trace.id": req.correlationId });
     const payload =
       process.env.NODE_ENV !== "production"
         ? { message: "Server error", error: String(err.message || err) }
@@ -193,8 +194,12 @@ export async function verifyOTP(req, res) {
       ]);
       user.role = "admin";
     }
+    const regSession = await createSession(user.id, {
+      userAgent: req.get("user-agent"),
+      ipAddress: req.ip,
+    });
     const token = signToken(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, sid: regSession.session_token },
       "6h",
     );
     const profile = user.profile_details || {};
@@ -213,7 +218,7 @@ export async function verifyOTP(req, res) {
       photoUrl,
     });
   } catch (err) {
-    console.error(err);
+    logger.error("Auth verifyOTP error", { err, "trace.id": req.correlationId });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -260,9 +265,10 @@ export async function login(req, res) {
     }
 
     // Check if user has a valid session (90-day session-based login)
-    const userHasValidSession = await hasValidSession(user.id);
-    if (userHasValidSession) {
+    const activeSessions = await getUserActiveSessions(user.id);
+    if (activeSessions.length > 0) {
       // User has valid session, skip OTP and return token directly
+      const latestSession = activeSessions[0]; // ordered by last_accessed_at DESC
       // If this email is listed in ADMIN_EMAILS, ensure role is admin both in DB and token
       if (ADMIN_EMAILS.includes(emailLower) && user.role !== "admin") {
         await pool.query("UPDATE users SET role='admin' WHERE email=$1", [
@@ -271,7 +277,7 @@ export async function login(req, res) {
         user.role = "admin";
       }
       const token = signToken(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, email: user.email, role: user.role, sid: latestSession.session_token },
         "6h",
       );
       const profile = user.profile_details || {};
@@ -325,7 +331,7 @@ export async function login(req, res) {
 
     return res.json({ message: "Login OTP sent to email" });
   } catch (err) {
-    console.error("/auth/login error:", err);
+    logger.error("Auth login error", { err, "trace.id": req.correlationId });
     const payload =
       process.env.NODE_ENV !== "production"
         ? { message: "Server error", error: String(err.message || err) }
@@ -386,7 +392,7 @@ export async function loginVerifyOTP(req, res) {
       userAgent: req.get("user-agent"),
       ipAddress: req.ip,
     };
-    await createSession(user.id, deviceInfo);
+    const session = await createSession(user.id, deviceInfo);
 
     // Fetch student profile data if role is student
     let studentProfile = {};
@@ -401,7 +407,7 @@ export async function loginVerifyOTP(req, res) {
     }
 
     const token = signToken(
-      { id: user.id, email: user.email, role: user.role },
+      { id: user.id, email: user.email, role: user.role, sid: session.session_token },
       "6h",
     );
     const profile = user.profile_details || {};
@@ -421,7 +427,7 @@ export async function loginVerifyOTP(req, res) {
       ...studentProfile,
     });
   } catch (err) {
-    console.error(err);
+    logger.error("Auth loginVerifyOTP error", { err, "trace.id": req.correlationId });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -470,7 +476,7 @@ export async function forgotVerifyOTP(req, res) {
     // OTP is valid — leave the row in DB so /auth/reset can consume it
     return res.json({ message: "OTP verified" });
   } catch (err) {
-    console.error("/auth/forgot-verify error:", err);
+    logger.error("Auth forgot-verify error", { err, "trace.id": req.correlationId });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -514,7 +520,7 @@ export async function initiateForgotPassword(req, res) {
 
     return res.json(genericResponse);
   } catch (err) {
-    console.error("/auth/forgot error:", err);
+    logger.error("Auth forgot-password error", { err, "trace.id": req.correlationId });
     const payload =
       process.env.NODE_ENV !== "production"
         ? { message: "Server error", error: String(err.message || err) }
@@ -583,7 +589,7 @@ export async function resetPassword(req, res) {
     await invalidateAllUserSessions(updated[0].id);
     return res.json({ message: "Password updated" });
   } catch (err) {
-    console.error(err);
+    logger.error("Auth resetPassword error", { err, "trace.id": req.correlationId });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -619,7 +625,7 @@ export async function getProfile(req, res) {
       photoUrl,
     });
   } catch (err) {
-    console.error("/auth/profile GET error:", err);
+    logger.error("Auth getProfile error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -673,7 +679,7 @@ export async function updateProfile(req, res) {
       profile: updatedProfile,
     });
   } catch (err) {
-    console.error("/auth/profile PUT error:", err);
+    logger.error("Auth updateProfile error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -717,7 +723,7 @@ export async function updateProfilePhoto(req, res) {
 
     return res.json({ message: "Photo updated", photoUrl });
   } catch (err) {
-    console.error("/auth/profile/photo POST error:", err);
+    logger.error("Auth updateProfilePhoto error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -727,15 +733,10 @@ export async function updateProfilePhoto(req, res) {
  */
 export async function logout(req, res) {
   try {
-    const sessionToken = req.headers["x-session-token"];
-
-    if (sessionToken) {
-      await invalidateAllUserSessions(req.user.id);
-    }
-
+    await invalidateAllUserSessions(req.user.id);
     return res.json({ message: "Logged out successfully" });
   } catch (err) {
-    console.error("/auth/logout error:", err);
+    logger.error("Auth logout error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }

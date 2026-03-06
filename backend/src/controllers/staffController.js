@@ -1,69 +1,22 @@
 // staffController.js
 import pool from "../config/db.js";
-import { sendMail } from "../config/mailer.js";
-import { getExpiryDate } from "../utils/otpGenerator.js"; // not required but available
+import logger from "../utils/logger.js";
+import { reviewProject, reviewAchievement, ReviewError } from "../services/reviewService.js";
 
 // Approve project
 export async function approveProject(req, res) {
   try {
-    const staffId = req.user.id;
-    const requesterRole = req.user?.role;
-    const projectId = Number(req.params.id);
-    const { comment } = req.body;
-
-    // Staff must be mapped to the project's activity_type
-    const { rows: authRows } = await pool.query(
-      `SELECT 1
-         FROM projects p
-         JOIN activity_coordinators ac
-           ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(p.activity_type)) AND ac.staff_id = $1
-        WHERE p.id = $2`,
-      [staffId, projectId]
+    const result = await reviewProject(
+      Number(req.params.id),
+      req.user.id,
+      "approve",
+      req.body.comment,
+      req.correlationId,
     );
-    if (!authRows.length) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to approve this project" });
-    }
-
-    const q = `UPDATE projects
-               SET verification_status='approved',
-                   verification_comment=$1,
-                   verified_by=$2,
-                   verified_at=NOW(),
-                   verified=true
-               WHERE id=$3
-               RETURNING id, title, created_by`;
-    const { rows } = await pool.query(q, [comment || null, staffId, projectId]);
-
-    if (!rows.length)
-      return res.status(404).json({ message: "Project not found" });
-
-    // Optionally notify creator by email
-    const creatorId = rows[0].created_by;
-    if (creatorId) {
-      const { rows: userRows } = await pool.query(
-        "SELECT email FROM users WHERE id=$1",
-        [creatorId]
-      );
-      if (userRows[0]) {
-        try {
-          await sendMail({
-            to: userRows[0].email,
-            subject: `Your project "${rows[0].title}" has been approved`,
-            text: `Your project has been approved by staff. Comment: ${
-              comment || "No comment"
-            }`,
-          });
-        } catch (err) {
-          console.error("Failed to send approval email", err);
-        }
-      }
-    }
-
-    return res.json({ message: "Project approved" });
+    return res.json(result);
   } catch (err) {
-    console.error(err);
+    if (err instanceof ReviewError) return res.status(err.status).json({ message: err.message });
+    logger.error("Staff controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -71,64 +24,17 @@ export async function approveProject(req, res) {
 // Reject project
 export async function rejectProject(req, res) {
   try {
-    const staffId = req.user.id;
-    const requesterRole = req.user?.role;
-    const projectId = Number(req.params.id);
-    const { comment } = req.body;
-
-    // Staff must be mapped to the project's activity_type
-    const { rows: authRows } = await pool.query(
-      `SELECT 1
-         FROM projects p
-         JOIN activity_coordinators ac
-           ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(p.activity_type)) AND ac.staff_id = $1
-        WHERE p.id = $2`,
-      [staffId, projectId]
+    const result = await reviewProject(
+      Number(req.params.id),
+      req.user.id,
+      "reject",
+      req.body.comment,
+      req.correlationId,
     );
-    if (!authRows.length) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to reject this project" });
-    }
-
-    const q = `UPDATE projects
-               SET verification_status='rejected',
-                   verification_comment=$1,
-                   verified_by=$2,
-                   verified_at=NOW(),
-                   verified=false
-               WHERE id=$3
-               RETURNING id, title, created_by`;
-    const { rows } = await pool.query(q, [comment || null, staffId, projectId]);
-
-    if (!rows.length)
-      return res.status(404).json({ message: "Project not found" });
-
-    // Notify creator
-    const creatorId = rows[0].created_by;
-    if (creatorId) {
-      const { rows: userRows } = await pool.query(
-        "SELECT email FROM users WHERE id=$1",
-        [creatorId]
-      );
-      if (userRows[0]) {
-        try {
-          await sendMail({
-            to: userRows[0].email,
-            subject: `Your project "${rows[0].title}" has been rejected`,
-            text: `Your project was rejected by staff. Comment: ${
-              comment || "No comment"
-            }`,
-          });
-        } catch (err) {
-          console.error("Failed to send rejection email", err);
-        }
-      }
-    }
-
-    return res.json({ message: "Project rejected" });
+    return res.json(result);
   } catch (err) {
-    console.error(err);
+    if (err instanceof ReviewError) return res.status(err.status).json({ message: err.message });
+    logger.error("Staff controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -136,64 +42,17 @@ export async function rejectProject(req, res) {
 // Approve achievement
 export async function approveAchievement(req, res) {
   try {
-    const staffId = req.user.id;
-    const requesterRole = req.user?.role;
-    const achievementId = Number(req.params.id);
-    const { comment } = req.body;
-
-    // Staff must be mapped to the achievement's activity_type
-    const { rows: authRows } = await pool.query(
-      `SELECT 1
-         FROM achievements a
-         JOIN activity_coordinators ac
-           ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(a.activity_type)) AND ac.staff_id = $1
-        WHERE a.id = $2`,
-      [staffId, achievementId]
+    const result = await reviewAchievement(
+      Number(req.params.id),
+      req.user.id,
+      "approve",
+      req.body.comment,
+      req.correlationId,
     );
-    if (!authRows.length) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to approve this achievement" });
-    }
-
-    const q = `UPDATE achievements
-               SET verification_status='approved',
-                   verification_comment=$1,
-                   verified_by=$2,
-                   verified_at=NOW(),
-                   verified=true
-               WHERE id=$3
-               RETURNING id, title, user_id`;
-    const { rows } = await pool.query(q, [
-      comment || null,
-      staffId,
-      achievementId,
-    ]);
-    if (!rows.length)
-      return res.status(404).json({ message: "Achievement not found" });
-
-    // notify user
-    const { rows: userRows } = await pool.query(
-      "SELECT email FROM users WHERE id=$1",
-      [rows[0].user_id]
-    );
-    if (userRows[0]) {
-      try {
-        await sendMail({
-          to: userRows[0].email,
-          subject: `Your achievement "${rows[0].title}" has been approved`,
-          text: `Your achievement has been approved by staff. Comment: ${
-            comment || "No comment"
-          }`,
-        });
-      } catch (err) {
-        console.error("email failed", err);
-      }
-    }
-
-    return res.json({ message: "Achievement approved" });
+    return res.json(result);
   } catch (err) {
-    console.error(err);
+    if (err instanceof ReviewError) return res.status(err.status).json({ message: err.message });
+    logger.error("Staff controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -201,63 +60,17 @@ export async function approveAchievement(req, res) {
 // Reject achievement
 export async function rejectAchievement(req, res) {
   try {
-    const staffId = req.user.id;
-    const requesterRole = req.user?.role;
-    const achievementId = Number(req.params.id);
-    const { comment } = req.body;
-
-    // Staff must be mapped to the achievement's activity_type
-    const { rows: authRows } = await pool.query(
-      `SELECT 1
-         FROM achievements a
-         JOIN activity_coordinators ac
-           ON LOWER(TRIM(ac.activity_type)) = LOWER(TRIM(a.activity_type)) AND ac.staff_id = $1
-        WHERE a.id = $2`,
-      [staffId, achievementId]
+    const result = await reviewAchievement(
+      Number(req.params.id),
+      req.user.id,
+      "reject",
+      req.body.comment,
+      req.correlationId,
     );
-    if (!authRows.length) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to reject this achievement" });
-    }
-
-    const q = `UPDATE achievements
-               SET verification_status='rejected',
-                   verification_comment=$1,
-                   verified_by=$2,
-                   verified_at=NOW(),
-                   verified=false
-               WHERE id=$3
-               RETURNING id, title, user_id`;
-    const { rows } = await pool.query(q, [
-      comment || null,
-      staffId,
-      achievementId,
-    ]);
-    if (!rows.length)
-      return res.status(404).json({ message: "Achievement not found" });
-
-    const { rows: userRows } = await pool.query(
-      "SELECT email FROM users WHERE id=$1",
-      [rows[0].user_id]
-    );
-    if (userRows[0]) {
-      try {
-        await sendMail({
-          to: userRows[0].email,
-          subject: `Your achievement "${rows[0].title}" has been rejected`,
-          text: `Your achievement was rejected by staff. Comment: ${
-            comment || "No comment"
-          }`,
-        });
-      } catch (err) {
-        console.error("email failed", err);
-      }
-    }
-
-    return res.json({ message: "Achievement rejected" });
+    return res.json(result);
   } catch (err) {
-    console.error(err);
+    if (err instanceof ReviewError) return res.status(err.status).json({ message: err.message });
+    logger.error("Staff controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
@@ -315,7 +128,7 @@ export async function staffDashboard(req, res) {
       recentFiles: recentUploadsR.rows,
     });
   } catch (err) {
-    console.error(err);
+    logger.error("Staff controller error", { err, "trace.id": req.correlationId, "user.id": req.user?.id });
     return res.status(500).json({ message: "Server error" });
   }
 }
