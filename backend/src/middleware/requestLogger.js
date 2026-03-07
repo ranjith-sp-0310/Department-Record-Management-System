@@ -41,18 +41,17 @@ function sanitizeReq(req) {
 }
 
 /**
- * Return a sanitized shim for the Express response suitable for the ECS formatter.
+ * Return a minimal shim for the Express response suitable for the ECS formatter.
  *
- * Express attaches res.req = req (the original request). The ECS formatter uses
- * res.req when building the Combined Log Format message string, bypassing the
- * sanitized req copy we pass as info.req. This shim replaces res.req with the
- * already-sanitized request object so the token cannot leak through that path.
+ * The ECS formatter only reads `res.statusCode` and `res.getHeaders()` from the
+ * response object (see @elastic/ecs-helpers formatHttpResponse source). Wrapping
+ * the real `res` avoids passing the full Express response (which holds circular
+ * references and internal state) into the logging pipeline.
  */
-function sanitizeRes(res, sanitizedReq) {
+function sanitizeRes(res) {
   return {
     statusCode: res.statusCode,
     getHeaders: () => res.getHeaders(),
-    req: sanitizedReq,
   };
 }
 
@@ -107,21 +106,20 @@ export function requestLogger(req, res, next) {
     const level =
       res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info";
 
-    const sanitizedReq = sanitizeReq(req);
     logger[isHealthProbe ? "debug" : level]("HTTP response sent", {
-      req: sanitizedReq,
-      res: sanitizeRes(res, sanitizedReq),
-      "event.duration": Number(durationNs),
+      req: sanitizeReq(req),
+      res: sanitizeRes(res),
+      event: { duration: Number(durationNs) },
       ...reqContext(req),
     });
 
     // Emit an extra warning when a request takes longer than the threshold.
     if (!isHealthProbe && durationNs > SLOW_THRESHOLD_NS) {
       logger.warn("Slow request detected", {
-        "url.path": req.path,
-        "http.request.method": req.method,
-        "event.duration": Number(durationNs),
-        "slow_threshold_ms": Number(process.env.SLOW_REQUEST_THRESHOLD_MS) || 1000,
+        url: { path: req.path },
+        http: { request: { method: req.method } },
+        event: { duration: Number(durationNs) },
+        slow_threshold_ms: Number(process.env.SLOW_REQUEST_THRESHOLD_MS) || 1000,
         ...reqContext(req),
       });
     }
@@ -131,9 +129,9 @@ export function requestLogger(req, res, next) {
   res.on("close", () => {
     if (!responded) {
       logger.warn("HTTP request aborted", {
-        "url.path": req.path,
-        "http.request.method": req.method,
-        "event.duration": Number(process.hrtime.bigint() - startTime),
+        url: { path: req.path },
+        http: { request: { method: req.method } },
+        event: { duration: Number(process.hrtime.bigint() - startTime) },
         ...reqContext(req),
       });
     }
