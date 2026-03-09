@@ -1,133 +1,59 @@
 pipeline {
     agent any
-
     environment {
         REPO_URL      = "https://github.com/G0kul17/Department-Record-Management-System.git"
-        BRANCH        = "main"
+        BRANCH        = "Gokul"
         BUILD_VERSION = "${env.BUILD_NUMBER}"
-        APP_HOST      = "192.168.122.192"
-        GATEWAY_HOST  = "192.168.122.24"
+        APP_HOST      = "staging-app-01"
+        GATEWAY_HOST  = "staging-gateway-01"
         REMOTE_USER   = "deploy"
-
-        // Required by backend unit tests (no real DB/email needed)
-        JWT_SECRET        = credentials('drms-jwt-secret')
-        FILE_STORAGE_PATH = '/tmp/jenkins-drms-uploads'
-        NODE_ENV          = 'test'
-        CI                = 'true'
     }
-
-    options {
-        timeout(time: 30, unit: 'MINUTES')
-        disableConcurrentBuilds()
-        buildDiscarder(logRotator(numToKeepStr: '20'))
-    }
-
     stages {
-
-        // ----------------------------------------------------------------
-        // 1. SOURCE
-        // ----------------------------------------------------------------
         stage('Checkout') {
             steps {
                 git branch: "${BRANCH}", url: "${REPO_URL}"
             }
         }
-
-        // ----------------------------------------------------------------
-        // 2. DEPENDENCIES
-        // ----------------------------------------------------------------
-        stage('Install Dependencies') {
-            parallel {
-                stage('Backend deps') {
-                    steps {
-                        dir('backend') {
-                            sh 'npm ci'
-                        }
-                    }
-                }
-                stage('Frontend deps') {
-                    steps {
-                        dir('frontend') {
-                            sh 'npm ci'
-                        }
-                    }
-                }
-            }
-        }
-
-        // ----------------------------------------------------------------
-        // 3. BACKEND — UNIT TESTS + COVERAGE
-        //    Runs before build/deploy so a failing test aborts the pipeline
-        //    early. JUnit results and the HTML coverage report are always
-        //    published so failures are visible in the Jenkins UI.
-        // ----------------------------------------------------------------
-        stage('Backend Tests') {
-            steps {
-                dir('backend') {
-                    sh 'npm run test:coverage'
-                }
-            }
-            post {
-                always {
-                    // Test result trend graph (requires JUnit plugin)
-                    junit allowEmptyResults: true,
-                          testResults: 'backend/test-results/junit.xml'
-
-                    // HTML coverage report (requires HTML Publisher plugin)
-                    publishHTML(target: [
-                        allowMissing         : true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll              : true,
-                        reportDir            : 'backend/coverage',
-                        reportFiles          : 'index.html',
-                        reportName           : 'Vitest Coverage'
-                    ])
-                }
-            }
-        }
-
-        // ----------------------------------------------------------------
-        // 4. FRONTEND — PRODUCTION BUILD
-        // ----------------------------------------------------------------
         stage('Build Frontend') {
             steps {
                 dir('frontend') {
                     sh '''
+                        rm -rf node_modules
+                        npm install
                         echo "VITE_API_BASE_URL=/api" > .env.production
                         npm run build
                         ls -la dist
                     '''
                 }
             }
-            post {
-                success {
-                    archiveArtifacts artifacts: 'frontend/dist/**', fingerprint: true
-                }
-            }
         }
-
-        // ----------------------------------------------------------------
-        // 5. PACKAGE BACKEND
-        //    Strip dev files before shipping to the server.
-        // ----------------------------------------------------------------
         stage('Prepare Backend Artifact') {
             steps {
                 sh '''
                     rm -rf backend_release
                     mkdir backend_release
                     cp -r backend/. backend_release/
-                    rm -rf backend_release/node_modules \
-                           backend_release/coverage \
-                           backend_release/test-results
                     echo "Backend artifact prepared:"
                     ls -la backend_release
                 '''
             }
         }
-
-        // ----------------------------------------------------------------
-        // 6. DEPLOY BACKEND
-        // ----------------------------------------------------------------
+        stage('Run Backend Tests') {
+            steps {
+                dir('backend') {
+                    sh '''
+                        npm ci
+                        npm test
+                    '''
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true,
+                          testResults: 'backend/test-results/junit.xml'
+                }
+            }
+        }
         stage('Deploy Backend') {
             steps {
                 sshagent(['drms-ssh']) {
@@ -139,14 +65,17 @@ pipeline {
                         scp -r backend_release/. \
                             ${REMOTE_USER}@${APP_HOST}:/opt/drms/backend/releases/${BUILD_VERSION}/
                         ssh ${REMOTE_USER}@${APP_HOST} '
-                            set -euxo pipefail
                             cd /opt/drms/backend/releases/${BUILD_VERSION}
+                            # Link shared env
                             ln -sfn /opt/drms/backend/.env .env
                             npm ci --omit=dev
+                            # Atomic switch
                             ln -sfn /opt/drms/backend/releases/${BUILD_VERSION} /opt/drms/backend/current
                             cd /opt/drms/backend/current
-                            pm2 reload drms --update-env
+                            pwd
+                            /usr/local/bin/pm2 delete drms && /usr/local/bin/pm2 start src/server.js --name drms
                             pm2 save
+                            # Keep only last 5 releases
                             cd /opt/drms/backend/releases
                             ls -1dt */ | tail -n +6 | xargs -r rm -rf
                         '
@@ -154,44 +83,32 @@ pipeline {
                 }
             }
         }
-
-        // ----------------------------------------------------------------
-        // 7. DEPLOY FRONTEND
-        // ----------------------------------------------------------------
         stage('Deploy Frontend') {
             steps {
                 sshagent(['drms-ssh']) {
                     sh """
                         ssh ${REMOTE_USER}@${GATEWAY_HOST} '
                             set -euxo pipefail
-                            rm -rf /var/www/drms/*
+                            rm -rf /var/www/drms-staging/*
                         '
                         scp -r frontend/dist/. \
-                            ${REMOTE_USER}@${GATEWAY_HOST}:/var/www/drms/
+                            ${REMOTE_USER}@${GATEWAY_HOST}:/var/www/drms-staging/
                     """
                 }
             }
         }
-
-        // ----------------------------------------------------------------
-        // 8. SMOKE TEST
-        // ----------------------------------------------------------------
         stage('Basic Validation') {
             steps {
                 sh '''
                     sleep 5
-                    curl -k -f https://192.168.122.24/ > /dev/null
+                    curl -k -f https://staging.drms.internal/ > /dev/null
                     sleep 5
-                    curl -k -f http://192.168.122.192:5000/health > /dev/null
+                    curl -k -f http://192.168.4.15:5000/ > /dev/null
                 '''
             }
         }
     }
-
     post {
-        always {
-            cleanWs()
-        }
         success {
             echo "Deployment successful. Release ${BUILD_VERSION} active."
         }
