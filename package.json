@@ -1,0 +1,19 @@
+{
+  "name": "department-record-management-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Checkly synthetic monitoring setup for DRMS",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "checkly:test": "checkly test --record",
+    "checkly:deploy": "checkly deploy"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^20.0.0",
+    "checkly": "^7.10.0",
+    "jiti": "^2.6.1",
+    "typescript": "^5.5.0"
+  }
+}
