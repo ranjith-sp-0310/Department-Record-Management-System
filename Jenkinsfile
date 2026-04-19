@@ -145,7 +145,7 @@ pipeline {
                             npm ci --omit=dev
                             ln -sfn /opt/drms/backend/releases/${BUILD_VERSION} /opt/drms/backend/current
                             cd /opt/drms/backend/current
-                            pm2 reload drms --update-env
+                            pm2 reload ecosystem.config.cjs --update-env || pm2 start ecosystem.config.cjs --env production
                             pm2 save
                             cd /opt/drms/backend/releases
                             ls -1dt */ | tail -n +6 | xargs -r rm -rf
