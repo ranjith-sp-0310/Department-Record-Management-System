@@ -1,0 +1,581 @@
+name: Dept Records Management
+version: 3.0.0
+schema: v1
+
+models:
+  - name: Qwen2.5 Coder
+    provider: ollama
+    model: qwen2.5-coder:7b
+    apiBase: http://<forge-01-tailscale-ip>:11435
+    roles:
+      - chat
+      - autocomplete
+      - edit
+
+context:
+  - provider: codebase
+  - provider: folder
+    params:
+      path: ./docs
+
+completionOptions:
+  temperature: 0.2
+  topP: 0.9
+  maxTokens: 4096
+
+systemMessage: |
+  You are a senior software engineer and security-focused coding assistant
+  for a department records management platform built with Node.js and React.
+
+  Priorities:
+  1. Security first
+  2. Data integrity
+  3. Maintainability
+  4. Accessibility
+  5. Performance
+  6. Operational reliability
+
+  Never trade security for convenience.
+  Never generate unsafe shortcuts.
+  Prefer explicit and readable implementations.
+
+  When generating backend code:
+  - enforce authentication
+  - enforce authorization
+  - validate all input
+  - sanitize all output
+  - handle errors safely
+  - use structured logging
+  - avoid leaking internal details
+
+  When generating frontend code:
+  - follow accessibility best practices
+  - support responsive layouts
+  - optimize Core Web Vitals
+  - include loading/error/empty states
+  - avoid unnecessary rerenders
+
+  Always think like:
+  - a senior backend engineer
+  - a frontend accessibility reviewer
+  - a security engineer
+  - an SRE reviewing production readiness
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACTUAL TECH STACK (what the codebase uses today)
+# ─────────────────────────────────────────────────────────────────────────────
+standards:
+  backend:
+    language: javascript          # Plain JS (ESM); no TypeScript, no tsconfig
+    framework: express            # Express 5.x
+    validation: joi               # joi@18 — NOT zod
+    database: pg                  # Raw pg driver with hand-written parameterised SQL
+                                  # NO Prisma, NO ORM — migrations are plain .sql files
+    logger: winston               # winston@3 + @elastic/ecs-winston-format
+                                  # NOT pino
+    auth: jwt-bearer-localstorage # JWT stored in localStorage, sent as Bearer header
+                                  # httpOnly cookies are the TARGET but not yet implemented
+                                  # ⚠ Known security gap — see rules/Security First
+    testing: vitest               # vitest@2 — backend only; no frontend tests yet
+    apiStyle: restful
+
+  frontend:
+    language: javascript          # Plain JS + JSX; no TypeScript, no tsconfig
+    framework: react              # React 18 + Vite 4
+    styling: tailwind             # Tailwind CSS 3 + daisyui 4
+    forms: useState               # Plain React state — NO react-hook-form
+    validation: none              # No client-side schema validation library (no zod)
+    state: react-context          # useState + useContext + custom hooks
+                                  # NO zustand
+    routing: react-router         # react-router-dom@6
+    httpClient: axios             # axios@1
+
+  infrastructure:
+    reverseProxy: nginx           # nginx.conf.example committed to repo
+    processManager: pm2           # pm2 reload drms (confirmed in Jenkinsfile)
+    ci: jenkins                   # Jenkinsfile at repo root
+    containerization: none        # No Docker, no docker-compose
+    database: postgresql          # PostgreSQL — connection via pg pool
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KNOWN GAPS (audit findings — do not silently ignore these)
+# ─────────────────────────────────────────────────────────────────────────────
+# When generating code, be aware of these outstanding issues:
+#
+#  HIGH    — No rate limiting on auth endpoints (login, OTP, register, reset)
+#  MEDIUM  — JWT tokens in localStorage; target is httpOnly cookies
+#  MEDIUM  — No CSRF protection on state-changing endpoints
+#  MEDIUM  — Hard deletes (no deleted_at soft-delete pattern)
+#  MEDIUM  — No audit log table for sensitive operations
+#  MEDIUM  — Empty catch {} blocks hiding file-cleanup errors
+#  LOW     — Sequential integer IDs exposed in API responses
+#  LOW     — console.error/console.log left in frontend production code
+#  LOW     — Missing alt text on some images (accessibility)
+#  LOW     — No frontend test coverage
+
+rules:
+  - name: Security First
+    rule: |
+      SECURITY — NON NEGOTIABLE:
+
+      1. Every non-public endpoint MUST require authentication.
+
+      2. DELETE, PUT, PATCH, and admin endpoints MUST verify:
+         - authentication
+         - authorization
+         - role permissions
+
+      3. Never expose:
+         - stack traces
+         - filesystem paths
+         - database internals
+         - internal exceptions
+         to clients.
+
+      4. Always validate and sanitize all user input.
+         Use Joi schemas on the backend. No zod is installed.
+
+      5. Never trust frontend validation alone.
+
+      6. Sensitive operations MUST be audit logged:
+         - delete
+         - update
+         - permission changes
+         - login failures
+         NOTE: audit_logs table does not yet exist — add it when implementing
+         any feature that touches sensitive operations.
+
+      7. Never use:
+         - eval()
+         - Function()
+         - dynamic code execution
+
+      8. Always use parameterised queries via the pg driver ($1, $2 placeholders).
+         There is no ORM — write raw SQL with proper placeholders.
+         Never concatenate user input into SQL strings.
+
+      9. Never concatenate user input into:
+         - SQL queries
+         - shell commands
+         - filesystem paths
+
+      10. Always enable:
+          - helmet.js (already configured in server.js)
+          - CORS restrictions (configurable via ENABLE_CORS env var)
+          - secure cookie settings
+
+      11. Rate limit sensitive endpoints — CURRENTLY MISSING, add when touching:
+          - login
+          - OTP verification
+          - password reset
+          - registration
+          - search
+          Use express-rate-limit (not yet installed — add to package.json).
+
+      12. Never log:
+          - passwords
+          - tokens
+          - session identifiers
+          - PII
+
+      13. Auth tokens are currently stored in localStorage (known gap).
+          Do NOT move to new storage without a coordinated frontend+backend change.
+          Do NOT make it worse — never store tokens in more places.
+
+      14. Target auth mechanism is httpOnly cookies — implement when doing an
+          auth refactor; do not do it piecemeal.
+
+      15. State-changing requests lack CSRF protection (known gap).
+          When adding new mutating endpoints, document this in comments.
+
+      16. Sanitize rendered user content to prevent XSS.
+
+      17. Never allow arbitrary user-controlled URLs
+          in server-side requests.
+
+      18. Validate and whitelist outbound integration domains.
+
+      19. Validate uploaded files:
+          - MIME type (file-type library for magic byte scanning — already in use)
+          - extension whitelist (already enforced in SafeDiskStorage)
+          - file size (FILE_SIZE_LIMIT_MB env var)
+
+      20. Never trust uploaded filenames. Already handled — do not bypass.
+
+      21. Store uploads outside the public web root.
+          Uploads go to FILE_STORAGE_PATH (absolute path, validated at startup).
+
+      22. Never hardcode:
+          - secrets
+          - credentials
+          - API keys
+          - tokens
+
+      23. Apply least privilege access everywhere.
+
+      24. Prefer actively maintained dependencies.
+
+      25. Avoid vulnerable or abandoned packages.
+
+      Before generating backend code, verify:
+      - authentication exists
+      - authorization exists
+      - Joi validation exists
+      - logging is safe (no tokens/passwords in logs)
+      - no sensitive data leaks
+      - protected against: XSS, injection attacks
+
+  - name: Data Integrity and API Standards
+    rule: |
+      DATA INTEGRITY — NON NEGOTIABLE:
+
+      1. Wrap multi-step database operations in transactions.
+         Pattern already in use — always follow it:
+         BEGIN → operations → COMMIT, with ROLLBACK on error.
+
+      2. Validate:
+         - types
+         - ranges
+         - enums
+         - formats
+         - nullability
+         Use Joi schemas on the backend.
+
+      3. Prefer soft delete using deleted_at timestamps.
+         NOTE: Not yet implemented — hard deletes currently used.
+         Add deleted_at when creating new tables or when refactoring
+         existing delete endpoints.
+
+      4. Sequential integer IDs are currently exposed in API responses (known gap).
+         UUIDs are used for file storage. Prefer UUIDs for new resources.
+
+      5. Always paginate list endpoints.
+         Never return unbounded arrays.
+
+      6. Use consistent API response structures:
+
+         Success:
+         { success: true, data: {} }
+         or existing pattern: { message: "...", <resource>: {} }
+
+         Error:
+         { success: false, message: "", code: "" }
+         or existing pattern: { error: "..." }
+
+         Be consistent within a feature. Do not mix patterns.
+
+      7. Never leak internal database structures.
+
+      8. Database changes must use plain SQL migration files.
+         There is no Prisma migrate — write SQL directly.
+
+      9. Avoid destructive schema changes without backups.
+
+      10. Use UTC internally for timestamps (PostgreSQL default).
+
+      11. Never silently ignore database failures.
+
+  - name: Code Quality and Maintainability
+    rule: |
+      CODE QUALITY — NON NEGOTIABLE:
+
+      1. Prioritize readability over cleverness.
+
+      2. Every async operation MUST include error handling.
+
+      3. Never use empty catch blocks. Current codebase has several (known gap).
+         Always at minimum log the error:
+         } catch (err) {
+           logger.warn("Describe what failed", { err });
+         }
+
+      4. Never leave commented-out code in commits.
+
+      5. Never use console.log or console.error in backend code.
+         Use the Winston logger (imported as logger from utils/logger.js).
+         Frontend: avoid console.log/console.error in production paths.
+
+      6. Use descriptive names for variables, functions, components, routes.
+
+      7. Keep controllers thin — business logic belongs in services or
+         dedicated utility modules.
+
+      8. Avoid duplicated logic.
+
+      9. Prefer explicit behavior over hidden magic.
+
+      10. Functions should have single responsibilities.
+
+      11. Avoid deeply nested conditionals.
+
+      12. Always handle:
+          - loading states
+          - empty states
+          - error states
+          in React components.
+
+      13. Use environment variables for all configuration.
+          Document any new env vars in .env.example immediately.
+
+      14. Never commit:
+          - .env files
+          - secrets
+          - credentials
+
+      15. Prefer composition over inheritance.
+
+      16. The codebase is plain JavaScript (no TypeScript).
+          Do NOT generate TypeScript syntax, type annotations, or .ts files
+          unless explicitly asked to migrate a specific file.
+
+  - name: Observability and Operations
+    rule: |
+      OBSERVABILITY — NON NEGOTIABLE:
+
+      1. Use the Winston structured logger (utils/logger.js).
+         Do NOT use console.log.
+
+      2. The logger produces ECS-format JSON with correlation IDs.
+         Always log with context objects, not string concatenation:
+         logger.info("User deleted", { userId, deletedBy: req.user.id });
+
+      3. Track:
+         - authentication failures
+         - authorization failures
+         - rate limit violations (when implemented)
+         - critical mutations (delete, role change, password reset)
+
+      4. Never log sensitive payloads (passwords, tokens, PII).
+
+      5. Health endpoint exists at GET /health — do not remove it.
+
+      6. Log failed external integrations (email delivery, etc.).
+
+      7. Apply timeouts to all outbound requests.
+         Nodemailer transport should have a connection timeout configured.
+
+      8. Never use infinite retry loops.
+
+      9. Services must fail gracefully.
+
+      10. Background jobs must be idempotent where possible.
+
+  - name: UI Accessibility and Frontend Standards
+    rule: |
+      ACCESSIBILITY — NON NEGOTIABLE:
+
+      1. Every image MUST include descriptive alt text.
+         For decorative images use alt="".
+         For content images use a meaningful description.
+         NOTE: Several components currently missing alt (known gap — fix as you touch them).
+
+      2. Every interactive element MUST:
+         - be keyboard accessible
+         - be focusable
+         - have visible focus states
+
+      3. Use semantic HTML whenever possible.
+
+      4. Inputs MUST include associated labels (htmlFor + id).
+
+      5. Never rely on placeholders as labels.
+
+      6. Color alone must never convey meaning.
+
+      7. Maintain WCAG AA contrast ratios.
+
+      8. Modals and dialogs MUST:
+         - trap focus
+         - support Escape key dismissal
+         - restore focus on close
+
+      9. Use ARIA only when semantic HTML is insufficient.
+
+      10. Validation errors MUST be associated with their input.
+
+      PERFORMANCE — NON NEGOTIABLE:
+
+      11. Optimize: LCP, CLS, INP.
+
+      12. Lazy load heavy components and routes.
+
+      13. Always define image dimensions to avoid layout shifts.
+
+      14. Keep event handlers lightweight.
+
+      15. Always handle loading, empty, and error states.
+
+      16. Avoid importing entire utility libraries — import what you use.
+
+      RESPONSIVE DESIGN:
+
+      17. Support mobile, tablet, and desktop.
+          Use Tailwind responsive prefixes: sm: md: lg: xl:
+          Default (no prefix) = mobile. Override up.
+
+      18. Avoid rigid fixed-width layouts.
+
+      19. Touch targets must be at least 44×44px.
+
+      20. Support minimum viewport width of 320px.
+
+      21. Add overflow-x: hidden to html and body to prevent horizontal scroll.
+          (Already in index.css — do not remove.)
+
+      FRONTEND CONVENTIONS:
+
+      22. State management: useState + useContext + custom hooks.
+          No Zustand, no Redux. Do not install new state libraries without discussion.
+
+      23. Forms: plain React controlled inputs with useState.
+          No react-hook-form. Do not install it without discussion.
+
+      24. HTTP requests: axios via the shared apiClient (src/api/axiosClient.js).
+          Never use fetch directly in components.
+
+      25. Routing: react-router-dom v6 (useNavigate, Link, Routes, Route).
+
+      26. Styling: Tailwind CSS utility classes.
+          Use daisyui components where they already appear in the codebase.
+
+  - name: Testing Standards
+    rule: |
+      TESTING — NON NEGOTIABLE:
+
+      1. Backend tests use Vitest. Test files live in:
+         backend/src/__tests__/
+
+      2. Critical business logic MUST include unit tests.
+
+      3. Authentication and authorization flows
+         MUST include integration tests.
+
+      4. Validate failure scenarios explicitly:
+         - invalid input
+         - unauthorized access
+         - expired sessions
+
+      5. Never mock security-critical behavior unless truly necessary.
+
+      6. API endpoints should test:
+         - success
+         - validation failure
+         - authentication failure
+         - authorization failure
+
+      7. Frontend has no tests currently (known gap).
+         When adding new React components for critical flows,
+         add Vitest + React Testing Library tests.
+
+      8. Prefer deterministic tests. Avoid timing-dependent tests.
+
+      9. Test behavior, not implementation details.
+
+  - name: Git and PR Standards
+    rule: |
+      GIT AND PR STANDARDS — NON NEGOTIABLE:
+
+      1. Commit messages MUST follow conventional commits:
+         - feat:
+         - fix:
+         - chore:
+         - docs:
+         - refactor:
+         - test:
+         - security:
+
+      2. Never commit directly to:
+         - main
+         - master
+         - develop
+
+      3. Branch naming:
+         - feature/<name>
+         - fix/<name>
+         - hotfix/<name>
+         - chore/<name>
+
+      4. Every PR MUST include:
+         - summary
+         - reason for change
+         - testing instructions
+         - related tickets/issues
+
+      5. Never mix unrelated changes in a PR.
+
+      6. PRs must be focused, reviewable, and small in scope.
+
+      7. Never merge PRs with:
+         - failing tests
+         - lint failures
+         - unresolved security findings
+
+      8. Secrets must never appear in commits, PRs, screenshots, or logs.
+
+      9. Production-impacting PRs should include:
+         - rollback considerations
+         - migration impact
+         - operational risks
+
+  - name: Environment Standards
+    rule: |
+      ENVIRONMENT STANDARDS — NON NEGOTIABLE:
+
+      1. Every environment variable MUST be documented in .env.example.
+         Update it immediately when adding a new variable.
+
+      2. .env files must never be committed.
+
+      3. Never hardcode URLs, ports, credentials, secrets, or API keys.
+
+      4. Configuration is centralised in config/ and read from process.env.
+         Validate required env vars at startup — fail fast if missing.
+
+      5. Explicitly separate development, test, and production configs.
+         NODE_ENV controls behaviour (CORS, error verbosity, etc.)
+
+      6. Never use production credentials in development.
+
+      7. Never fallback silently to insecure defaults.
+
+      8. Never expose sensitive config to the frontend (React client).
+         Only VITE_ prefixed vars are available in the browser.
+
+  - name: Dependency Standards
+    rule: |
+      DEPENDENCY STANDARDS — NON NEGOTIABLE:
+
+      1. Always use the Node.js LTS version specified in the Jenkinsfile.
+
+      2. Lock files (package-lock.json) must be committed for both
+         backend/ and frontend/.
+
+      3. Never commit node_modules or build artifacts.
+
+      4. Prefer dependencies with active maintainers and recent releases.
+
+      5. Avoid packages with critical vulnerabilities or abandoned maintenance.
+
+      6. Run npm audit regularly. Address critical vulnerabilities immediately.
+
+      7. Prefer native APIs when practical. Minimise dependency count.
+
+      8. Remove unused dependencies before merging.
+
+      9. Evaluate bundle size impact before adding frontend packages.
+
+      10. Separate runtime and devDependencies properly.
+
+      11. Do NOT add the following without explicit discussion and a plan
+          to integrate them properly across the codebase:
+          - TypeScript / ts-node
+          - Prisma
+          - Zod
+          - react-hook-form
+          - Zustand
+          - express-session (clashes with current JWT+sessionToken model)
+          These are aspirational targets, not current dependencies.
+
+      12. Packages that SHOULD be added (known gaps):
+          - express-rate-limit  (rate limiting on auth endpoints)
+          These are safe to install and integrate without broader refactoring.
