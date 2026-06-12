@@ -15,7 +15,9 @@ pipeline {
         NODE_ENV          = 'test'
         CI                = 'true'
 
-        ZENDUTY_WEBHOOK_URL = credentials('drms-zenduty-webhook')
+        ZENDUTY_WEBHOOK_URL  = credentials('drms-zenduty-webhook')
+        // Populated at runtime in Deploy Backend; used by failure rollback
+        PREVIOUS_RELEASE     = ''
     }
 
     options {
@@ -136,6 +138,14 @@ pipeline {
         stage('Deploy Backend') {
             steps {
                 sshagent(['drms-ssh']) {
+                    script {
+                        // Snapshot what is currently live before we touch anything.
+                        // If this deploy fails, the failure block rolls back to this.
+                        env.PREVIOUS_RELEASE = sh(
+                            returnStdout: true,
+                            script: "ssh ${REMOTE_USER}@${APP_HOST} 'readlink /opt/drms/backend/current 2>/dev/null | xargs -I{} basename {} 2>/dev/null || true'"
+                        ).trim()
+                    }
                     sh """
                         ssh ${REMOTE_USER}@${APP_HOST} '
                             set -euxo pipefail
@@ -211,6 +221,20 @@ pipeline {
             """
         }
         failure {
+            sshagent(['drms-ssh']) {
+                sh """
+                    if [ -n "${PREVIOUS_RELEASE}" ]; then
+                        echo "Deploy failed — rolling back to release ${PREVIOUS_RELEASE}..."
+                        ssh ${REMOTE_USER}@${APP_HOST} '
+                            ln -sfn /opt/drms/backend/releases/${PREVIOUS_RELEASE} /opt/drms/backend/current
+                            pm2 reload drms --update-env
+                        ' && echo "Rollback to ${PREVIOUS_RELEASE} succeeded." \
+                          || echo "WARNING: Rollback to ${PREVIOUS_RELEASE} failed — manual intervention required."
+                    else
+                        echo "No previous release captured — skipping automatic rollback."
+                    fi
+                """
+            }
             sh """
                 curl -s -X POST "${ZENDUTY_WEBHOOK_URL}" \
                     -H 'Content-Type: application/json' \
