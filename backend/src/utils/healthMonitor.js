@@ -13,6 +13,9 @@ const ANOMALY_AUTH_FAILURES   = Number(process.env.ANOMALY_AUTH_FAILURES)   || 2
 const ANOMALY_TRAFFIC_SPIKE   = Number(process.env.ANOMALY_TRAFFIC_SPIKE)   || 500;
 
 const firingAlerts = new Map();
+// Counts how many consecutive check cycles each anomaly has been failing.
+// Resets to 0 on the first passing cycle.
+const consecutiveFailures = new Map();
 
 // Core tables the app cannot function without
 const CORE_TABLES = [
@@ -245,15 +248,21 @@ function buildSummary(checkName, errorMessage) {
   ].join("\n");
 }
 
+// minConsecutive: how many back-to-back failing cycles before Zenduty pages.
+//   1 = page immediately (infrastructure — always broken, always actionable)
+//   2 = page after 2 cycles (~2 min) — filters one-off transient anomalies
+//
+// traffic_spike is intentionally excluded: high volume with healthy error rate
+// and latency is not actionable on its own. It is logged as a warning below
+// instead of paging. If the spike is causing harm, error_rate or latency fires.
 const CHECKS = [
-  { name: "db",            fn: checkDatabase     },
-  { name: "tables",        fn: checkCoreTables   },
-  { name: "email",         fn: checkEmail        },
-  { name: "storage",       fn: checkStorage      },
-  { name: "error_rate",    fn: checkErrorRate    },
-  { name: "latency",       fn: checkLatency      },
-  { name: "auth_failures", fn: checkAuthFailures },
-  { name: "traffic_spike", fn: checkTrafficSpike },
+  { name: "db",            fn: checkDatabase,     minConsecutive: 1 },
+  { name: "tables",        fn: checkCoreTables,   minConsecutive: 1 },
+  { name: "email",         fn: checkEmail,        minConsecutive: 1 },
+  { name: "storage",       fn: checkStorage,      minConsecutive: 1 },
+  { name: "error_rate",    fn: checkErrorRate,    minConsecutive: 2 },
+  { name: "latency",       fn: checkLatency,      minConsecutive: 2 },
+  { name: "auth_failures", fn: checkAuthFailures, minConsecutive: 2 },
 ];
 
 async function postZenduty(message, alertType, entityId, summary) {
@@ -278,9 +287,10 @@ async function postZenduty(message, alertType, entityId, summary) {
 }
 
 export async function runHealthChecks() {
-  for (const { name, fn } of CHECKS) {
+  for (const { name, fn, minConsecutive } of CHECKS) {
     try {
       await fn();
+      consecutiveFailures.set(name, 0);
       logger.debug("health.check.ok", { "health.check": name });
       if (firingAlerts.get(name)) {
         firingAlerts.set(name, false);
@@ -288,10 +298,26 @@ export async function runHealthChecks() {
         await postZenduty(`DRMS [${name}] recovered`, "info", `drms-${name}`, `${name} check recovered`);
       }
     } catch (err) {
-      // Only log + alert on first failure — firingAlerts prevents duplicates
-      if (!firingAlerts.get(name)) {
+      const count = (consecutiveFailures.get(name) || 0) + 1;
+      consecutiveFailures.set(name, count);
+
+      if (count < minConsecutive) {
+        // Transient — warn locally so it shows in logs, but don't page yet.
+        // If it persists to the next cycle, it will fire.
+        logger.warn("health.check.warning", {
+          "health.check": name,
+          "health.consecutive": count,
+          "health.fires_at": minConsecutive,
+          err,
+        });
+      } else if (!firingAlerts.get(name)) {
+        // Condition has persisted long enough — page.
         firingAlerts.set(name, true);
-        logger.error("health.check.failed", { "health.check": name, err });
+        logger.error("health.check.failed", {
+          "health.check": name,
+          "health.consecutive": count,
+          err,
+        });
         await postZenduty(
           `DRMS [${name}] failed: ${err.message}`,
           "critical",
@@ -300,6 +326,15 @@ export async function runHealthChecks() {
         );
       }
     }
+  }
+
+  // Traffic spike: log-only — high volume with healthy error rate / latency is
+  // not independently actionable. If the spike is causing harm, error_rate or
+  // latency will fire instead.
+  try {
+    checkTrafficSpike();
+  } catch (err) {
+    logger.warn("health.anomaly.traffic_spike", { message: err.message });
   }
 }
 

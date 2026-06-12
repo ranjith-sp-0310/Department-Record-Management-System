@@ -2,6 +2,16 @@
 
 All alerts fire from the internal health monitor (runs every 60s inside the backend process) to Zenduty. Each alert resolves automatically when the check passes again.
 
+### Alert firing policy
+
+| Check type | Fires after | Rationale |
+|-----------|-------------|-----------|
+| `db`, `tables`, `email`, `storage` | 1 failing cycle (~1 min) | Infrastructure broken = always actionable immediately |
+| `error_rate`, `latency`, `auth_failures` | 2 consecutive failing cycles (~2 min) | Filters one-off transient spikes; only pages for sustained conditions |
+| `traffic_spike` | Never pages — logged only | High volume with healthy error rate / latency is not independently actionable; `error_rate` and `latency` cover the impact if the spike causes harm |
+
+A check that fails once and then recovers before the second cycle produces a local `warn` log entry but no Zenduty alert.
+
 ---
 
 ## Alert → Action Mapping
@@ -266,26 +276,23 @@ tail -n 200 /var/log/nginx/access.log | grep " 401 "
 
 ---
 
-### `DRMS [traffic_spike] failed`
+### Traffic spike (log-only — does not page)
 
-**Impact:** Unusually high request volume — may degrade performance or indicate a DDoS.
+High request volume alone is not independently actionable: if the app is handling it without elevated errors or latency, no on-call action is needed. This condition is logged as a local `warn` rather than a Zenduty alert.
 
 **Threshold:** More than 500 requests in the current 60s window (override: `ANOMALY_TRAFFIC_SPIKE`).
 
-**Immediate check:**
+**If you see `health.anomaly.traffic_spike` in logs and want to investigate:**
 ```bash
 tail -n 1000 /var/log/nginx/access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head -20
 curl -s http://localhost:5000/health | jq '.database.pool'
 ```
 
-**Actions in order:**
+1. If one or few IPs dominate → block: `ufw deny from <ip>`
+2. If pool health is degraded → follow the `[latency]` runbook.
+3. If legitimate surge (deadline, event) → no action needed.
 
-1. If traffic is concentrated on a few IPs → block them: `ufw deny from <ip>`
-2. Check pool health — if pool under pressure follow `[latency]` runbook.
-3. If legitimate surge (deadline, event) → monitor, no action needed.
-4. Consider enabling Cloudflare proxy for DDoS mitigation if not already active.
-
-**Resolves automatically** once request volume drops below threshold.
+> If the spike is actually causing harm, `error_rate` or `latency` will fire first — act on those instead.
 
 ---
 
@@ -318,8 +325,7 @@ Expected response when all healthy:
     "storage": "ok",
     "error_rate": "ok",
     "latency": "ok",
-    "auth_failures": "ok",
-    "traffic_spike": "ok"
+    "auth_failures": "ok"
   },
   "database": {
     "latency": "2ms",
@@ -344,8 +350,7 @@ Response when degraded:
     "storage": "ok",
     "error_rate": "ok",
     "latency": "ok",
-    "auth_failures": "failing",
-    "traffic_spike": "ok"
+    "auth_failures": "failing"
   }
 }
 ```
