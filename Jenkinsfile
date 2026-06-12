@@ -14,6 +14,8 @@ pipeline {
         FILE_STORAGE_PATH = '/tmp/jenkins-drms-uploads'
         NODE_ENV          = 'test'
         CI                = 'true'
+
+        ZENDUTY_WEBHOOK_URL = credentials('drms-zenduty-webhook')
     }
 
     options {
@@ -196,10 +198,30 @@ pipeline {
             cleanWs()
         }
         success {
-            echo "Deployment successful. Release ${BUILD_VERSION} active."
+            sh """
+                curl -s -X POST "${ZENDUTY_WEBHOOK_URL}" \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "message": "DRMS deploy #${BUILD_VERSION} succeeded",
+                        "alert_type": "info",
+                        "status": "resolved",
+                        "entity_id": "drms-deploy",
+                        "summary": "Build ${BUILD_VERSION} deployed successfully."
+                    }' || true
+            """
         }
         failure {
-            echo "Deployment failed. Investigate logs immediately."
+            sh """
+                curl -s -X POST "${ZENDUTY_WEBHOOK_URL}" \
+                    -H 'Content-Type: application/json' \
+                    -d '{
+                        "message": "DRMS deploy #${BUILD_VERSION} FAILED",
+                        "alert_type": "critical",
+                        "status": "triggered",
+                        "entity_id": "drms-deploy",
+                        "summary": "Build ${BUILD_VERSION} failed. Check Jenkins: ${BUILD_URL}"
+                    }' || true
+            """
         }
     }
 }
