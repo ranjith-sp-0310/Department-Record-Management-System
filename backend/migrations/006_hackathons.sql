@@ -39,7 +39,6 @@ CREATE INDEX IF NOT EXISTS idx_hackathons_verification_status ON hackathons(veri
 CREATE INDEX IF NOT EXISTS idx_hackathons_progress ON hackathons(progress);
 CREATE INDEX IF NOT EXISTS idx_hackathons_created_at ON hackathons(created_at);
 
--- Update schema version (commented out - table may not exist yet)
--- INSERT INTO schema_version (version, description) 
--- VALUES (6, 'Hackathon Entry and Progress table')
--- ON CONFLICT (version) DO NOTHING;
+INSERT INTO schema_version (version, description)
+VALUES (6, 'Hackathon Entry and Progress table')
+ON CONFLICT (version) DO NOTHING;

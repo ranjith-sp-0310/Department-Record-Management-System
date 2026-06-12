@@ -158,6 +158,37 @@ pipeline {
                             cd /opt/drms/backend/releases/${BUILD_VERSION}
                             ln -sfn /opt/drms/backend/.env .env
                             npm ci --omit=dev
+
+                            echo "--- Checking for pending database migrations ---"
+                            DB_USER_VAL=\$(grep "^DB_USER=" /opt/drms/backend/.env | cut -d= -f2-)
+                            DB_PASS_VAL=\$(grep "^DB_PASS=" /opt/drms/backend/.env | cut -d= -f2-)
+                            DB_HOST_VAL=\$(grep "^DB_HOST=" /opt/drms/backend/.env | cut -d= -f2-)
+                            DB_PORT_VAL=\$(grep "^DB_PORT=" /opt/drms/backend/.env | cut -d= -f2-)
+                            DB_NAME_VAL=\$(grep "^DB_NAME=" /opt/drms/backend/.env | cut -d= -f2-)
+                            APPLIED=\$(PGPASSWORD="\$DB_PASS_VAL" psql \
+                                -U "\$DB_USER_VAL" \
+                                -h "\${DB_HOST_VAL:-localhost}" \
+                                -p "\${DB_PORT_VAL:-5432}" \
+                                -d "\$DB_NAME_VAL" \
+                                -tAc "SELECT version FROM schema_version ORDER BY version;" \
+                                2>/dev/null || echo "")
+                            for mf in \$(find /opt/drms/backend/releases/${BUILD_VERSION}/migrations -name "*.sql" | sort); do
+                                fname=\$(basename "\$mf")
+                                VER=\$(printf "%d" "\$(echo "\$fname" | grep -oE "^[0-9]+")")
+                                if echo "\$APPLIED" | grep -qx "\$VER"; then
+                                    echo "  skip: \$fname"
+                                else
+                                    echo "  apply: \$fname"
+                                    PGPASSWORD="\$DB_PASS_VAL" psql \
+                                        -U "\$DB_USER_VAL" \
+                                        -h "\${DB_HOST_VAL:-localhost}" \
+                                        -p "\${DB_PORT_VAL:-5432}" \
+                                        -d "\$DB_NAME_VAL" \
+                                        -f "\$mf"
+                                fi
+                            done
+                            echo "--- Migrations complete ---"
+
                             ln -sfn /opt/drms/backend/releases/${BUILD_VERSION} /opt/drms/backend/current
                             cd /opt/drms/backend/current
                             pm2 reload drms --update-env
