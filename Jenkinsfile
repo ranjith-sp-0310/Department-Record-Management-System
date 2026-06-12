@@ -90,6 +90,9 @@ pipeline {
         // 4. FRONTEND — PRODUCTION BUILD
         // ----------------------------------------------------------------
         stage('Build Frontend') {
+            environment {
+                NODE_ENV = 'production'
+            }
             steps {
                 dir('frontend') {
                     sh '''
