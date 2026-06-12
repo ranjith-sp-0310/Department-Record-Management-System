@@ -67,6 +67,14 @@ async function flush() {
   }
 }
 
+export function peekSnapshot() {
+  const sorted = [...latencies].sort((a, b) => a - b);
+  const p95ms = sorted.length
+    ? sorted[Math.floor(sorted.length * 0.95)] ?? sorted[sorted.length - 1]
+    : 0;
+  return { totalRequests, serverErrors, clientErrors, authFailures, p95LatencyMs: p95ms };
+}
+
 export function startMetricsFlusher() {
   const interval = Number(process.env.DRMS_METRICS_FLUSH_MS) || 60_000;
   setInterval(flush, interval);

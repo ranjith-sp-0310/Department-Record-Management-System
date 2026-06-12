@@ -1,9 +1,16 @@
 import pool, { getPoolHealth } from "../config/db.js";
 import { transporter, isMailConfigured } from "../config/mailer.js";
 import { STORAGE_PATH } from "../config/upload.js";
+import { peekSnapshot } from "./metricsBuffer.js";
 import fs from "fs";
 import path from "path";
 import logger from "./logger.js";
+
+const MIN_REQUESTS_FOR_ANOMALY = 10;
+const ANOMALY_ERROR_RATE_PCT  = Number(process.env.ANOMALY_ERROR_RATE_PCT)  || 10;
+const ANOMALY_P95_LATENCY_MS  = Number(process.env.ANOMALY_P95_LATENCY_MS)  || 2000;
+const ANOMALY_AUTH_FAILURES   = Number(process.env.ANOMALY_AUTH_FAILURES)   || 20;
+const ANOMALY_TRAFFIC_SPIKE   = Number(process.env.ANOMALY_TRAFFIC_SPIKE)   || 500;
 
 const firingAlerts = new Map();
 
@@ -53,6 +60,39 @@ async function checkStorage() {
   const stats = await fs.promises.statfs(STORAGE_PATH);
   const usedPct = Math.round((1 - stats.bavail / stats.blocks) * 100);
   if (usedPct >= 90) throw new Error(`Disk usage at ${usedPct}% — uploads may fail`);
+}
+
+function checkErrorRate() {
+  const { totalRequests, serverErrors } = peekSnapshot();
+  if (totalRequests < MIN_REQUESTS_FOR_ANOMALY) return;
+  const pct = (serverErrors / totalRequests) * 100;
+  if (pct > ANOMALY_ERROR_RATE_PCT) {
+    throw new Error(`Server error rate ${pct.toFixed(1)}% exceeds threshold ${ANOMALY_ERROR_RATE_PCT}% (${serverErrors}/${totalRequests} requests)`);
+  }
+}
+
+function checkLatency() {
+  const { totalRequests, p95LatencyMs } = peekSnapshot();
+  if (totalRequests < MIN_REQUESTS_FOR_ANOMALY) return;
+  if (p95LatencyMs > ANOMALY_P95_LATENCY_MS) {
+    throw new Error(`p95 latency ${p95LatencyMs}ms exceeds threshold ${ANOMALY_P95_LATENCY_MS}ms`);
+  }
+}
+
+function checkAuthFailures() {
+  const { totalRequests, authFailures } = peekSnapshot();
+  if (totalRequests < MIN_REQUESTS_FOR_ANOMALY) return;
+  if (authFailures > ANOMALY_AUTH_FAILURES) {
+    throw new Error(`Auth failures ${authFailures} in current window exceeds threshold ${ANOMALY_AUTH_FAILURES}`);
+  }
+}
+
+function checkTrafficSpike() {
+  const { totalRequests } = peekSnapshot();
+  if (totalRequests < MIN_REQUESTS_FOR_ANOMALY) return;
+  if (totalRequests > ANOMALY_TRAFFIC_SPIKE) {
+    throw new Error(`Request count ${totalRequests} in current window exceeds threshold ${ANOMALY_TRAFFIC_SPIKE}`);
+  }
 }
 
 const RUNBOOKS = {
@@ -123,6 +163,70 @@ const RUNBOOKS = {
       "6. After fix: app recovers automatically within 60s — no restart needed",
     ],
   },
+  error_rate: {
+    impact: "High rate of 5xx responses — multiple users are hitting server errors on every request.",
+    causes: [
+      "Database query failing on a hot code path (e.g. missing column after botched migration)",
+      "Unhandled exception in a route after a recent deploy",
+      "Third-party service (SMTP, Cloudflare) throwing errors that propagate to the API",
+      "Memory pressure causing process instability",
+    ],
+    steps: [
+      "1. Check PM2 logs for stack traces → `pm2 logs drms --lines 100`",
+      "2. Check health endpoint → `curl -s http://localhost:5000/health | jq .`",
+      "3. If DB check failing → follow the [db] runbook",
+      "4. If a recent deploy landed → roll back → `git checkout <prev-hash>` + `pm2 reload drms`",
+      "5. Check memory → `pm2 monit` — if heap near limit, restart → `pm2 restart drms`",
+    ],
+  },
+  latency: {
+    impact: "API responses are slow — users experience timeouts or long waits on all pages.",
+    causes: [
+      "Slow database queries (missing index, table scan on large table)",
+      "Connection pool near exhaustion — requests queuing for a slot",
+      "Database server under high I/O or CPU load",
+      "Network latency between app VM and DB VM increased",
+    ],
+    steps: [
+      "1. Check pool stats → `curl -s -H 'Authorization: Bearer <token>' http://localhost:5000/pool-stats | jq .`",
+      "2. If pool waiting > 0: check for long-running queries → `SELECT pid, query, now() - pg_stat_activity.query_start AS duration FROM pg_stat_activity WHERE state = 'active' ORDER BY duration DESC;`",
+      "3. Check DB server load → SSH to drms-db: `top`, `iostat -x 1 5`",
+      "4. If pool exhausted: restart app → `pm2 restart drms`",
+      "5. Monitor after restart — alert resolves within 60s if latency returns to normal",
+    ],
+  },
+  auth_failures: {
+    impact: "Possible credential stuffing or brute-force attack on login/OTP endpoints.",
+    causes: [
+      "Automated login attempts (credential stuffing from leaked password lists)",
+      "OTP brute-force attack against a specific account",
+      "Misconfigured integration repeatedly hitting auth with wrong credentials",
+      "Load test running against production accidentally",
+    ],
+    steps: [
+      "1. Check auth logs → `pm2 logs drms --lines 100 | grep auth`",
+      "2. Identify source IPs → check Nginx access log → `tail -n 200 /var/log/nginx/access.log | grep 401`",
+      "3. If single IP: block with UFW → `ufw deny from <ip> to any`",
+      "4. Check otp_attempts table for targeted accounts → `psql -U $DB_USER -d $DB_NAME -c 'SELECT identifier, attempt_count FROM otp_attempts ORDER BY attempt_count DESC LIMIT 10;'`",
+      "5. If wide attack: consider temporarily tightening rate limits in Nginx",
+    ],
+  },
+  traffic_spike: {
+    impact: "Unusually high request volume — may degrade performance for all users or indicate a DDoS.",
+    causes: [
+      "Legitimate surge (assignment deadline, exam results released)",
+      "Runaway scraper or misconfigured client in a retry loop",
+      "DDoS or stress test pointed at production",
+      "Viral link to the app shared externally",
+    ],
+    steps: [
+      "1. Check Nginx access log for request distribution → `tail -n 500 /var/log/nginx/access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head -20`",
+      "2. If one or few IPs dominate: block with UFW → `ufw deny from <ip>`",
+      "3. Check PM2 and pool health → `pm2 status drms`, `curl -s http://localhost:5000/health | jq .`",
+      "4. If legitimate spike: monitor — alert resolves when volume drops below threshold",
+      "5. Consider enabling Cloudflare proxy (if not already) for rate-limiting and DDoS protection",
+    ],
+  },
 };
 
 function buildSummary(checkName, errorMessage) {
@@ -142,10 +246,14 @@ function buildSummary(checkName, errorMessage) {
 }
 
 const CHECKS = [
-  { name: "db",      fn: checkDatabase   },
-  { name: "tables", fn: checkCoreTables },
-  { name: "email",  fn: checkEmail      },
-  { name: "storage",fn: checkStorage    },
+  { name: "db",            fn: checkDatabase     },
+  { name: "tables",        fn: checkCoreTables   },
+  { name: "email",         fn: checkEmail        },
+  { name: "storage",       fn: checkStorage      },
+  { name: "error_rate",    fn: checkErrorRate    },
+  { name: "latency",       fn: checkLatency      },
+  { name: "auth_failures", fn: checkAuthFailures },
+  { name: "traffic_spike", fn: checkTrafficSpike },
 ];
 
 async function postZenduty(message, alertType, entityId, summary) {

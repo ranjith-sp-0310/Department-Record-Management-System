@@ -177,6 +177,118 @@ ls -la $FILE_STORAGE_PATH
 
 ---
 
+### `DRMS [error_rate] failed`
+
+**Impact:** Multiple users are hitting server errors (5xx) on every request.
+
+**Immediate check:**
+```bash
+pm2 logs drms --lines 100
+curl -s http://localhost:5000/health | jq '.checks'
+```
+
+**Threshold:** Server error rate > 10% of requests in the current 60s window (override: `ANOMALY_ERROR_RATE_PCT`).
+
+**Actions in order:**
+
+1. Check logs for stack traces — identify the failing route.
+2. Check all health checks — if `db` is also failing, follow the `[db]` runbook first.
+3. If triggered after a deploy → roll back:
+   ```bash
+   cd /opt/drms && git log --oneline -5
+   git checkout <last-good-hash>
+   pm2 reload drms --update-env
+   ```
+4. Check memory pressure → `pm2 monit`. If heap near limit: `pm2 restart drms`.
+
+**Resolves automatically** once error rate drops below threshold.
+
+---
+
+### `DRMS [latency] failed`
+
+**Impact:** API responses are slow — users experience long waits or timeouts.
+
+**Threshold:** p95 response time > 2000ms in the current 60s window (override: `ANOMALY_P95_LATENCY_MS`).
+
+**Immediate check:**
+```bash
+curl -s http://localhost:5000/health | jq '.database.pool'
+curl -s -H "Authorization: Bearer <token>" http://localhost:5000/pool-stats | jq .
+```
+
+**Actions in order:**
+
+1. Check pool — if `waiting > 0` there are queued requests:
+   ```bash
+   psql -U $DB_USER -d $DB_NAME -c "
+   SELECT pid, query, now() - query_start AS duration
+   FROM pg_stat_activity WHERE state = 'active'
+   ORDER BY duration DESC LIMIT 10;"
+   ```
+2. Kill long-running queries if found: `SELECT pg_terminate_backend(<pid>);`
+3. Check DB server load: SSH to `drms-db` → `top`, `iostat -x 1 5`
+4. If pool is exhausted: `pm2 restart drms`
+
+**Resolves automatically** once p95 drops below threshold.
+
+---
+
+### `DRMS [auth_failures] failed`
+
+**Impact:** Possible credential stuffing or brute-force attack on auth endpoints.
+
+**Threshold:** More than 20 `401` responses from `/api/auth/*` in the current 60s window (override: `ANOMALY_AUTH_FAILURES`).
+
+**Immediate check:**
+```bash
+tail -n 200 /var/log/nginx/access.log | grep " 401 "
+```
+
+**Actions in order:**
+
+1. Identify attacking IPs:
+   ```bash
+   tail -n 500 /var/log/nginx/access.log | awk '$9==401{print $1}' | sort | uniq -c | sort -rn | head -10
+   ```
+2. Block top offenders:
+   ```bash
+   ufw deny from <ip> to any
+   ```
+3. Check if any account is being targeted:
+   ```bash
+   psql -U $DB_USER -d $DB_NAME -c \
+     "SELECT identifier, attempt_count FROM otp_attempts ORDER BY attempt_count DESC LIMIT 10;"
+   ```
+4. If wide attack persists, tighten Nginx rate limits temporarily.
+
+**Resolves automatically** once the failure count drops below threshold.
+
+---
+
+### `DRMS [traffic_spike] failed`
+
+**Impact:** Unusually high request volume — may degrade performance or indicate a DDoS.
+
+**Threshold:** More than 500 requests in the current 60s window (override: `ANOMALY_TRAFFIC_SPIKE`).
+
+**Immediate check:**
+```bash
+tail -n 1000 /var/log/nginx/access.log | awk '{print $1}' | sort | uniq -c | sort -rn | head -20
+curl -s http://localhost:5000/health | jq '.database.pool'
+```
+
+**Actions in order:**
+
+1. If traffic is concentrated on a few IPs → block them: `ufw deny from <ip>`
+2. Check pool health — if pool under pressure follow `[latency]` runbook.
+3. If legitimate surge (deadline, event) → monitor, no action needed.
+4. Consider enabling Cloudflare proxy for DDoS mitigation if not already active.
+
+**Resolves automatically** once request volume drops below threshold.
+
+---
+
 ## Zenduty Alert States
 
 | `alert_type` | `status` | Meaning |
@@ -203,7 +315,11 @@ Expected response when all healthy:
     "db": "ok",
     "tables": "ok",
     "email": "ok",
-    "storage": "ok"
+    "storage": "ok",
+    "error_rate": "ok",
+    "latency": "ok",
+    "auth_failures": "ok",
+    "traffic_spike": "ok"
   },
   "database": {
     "latency": "2ms",
@@ -225,7 +341,11 @@ Response when degraded:
     "db": "ok",
     "tables": "ok",
     "email": "failing",
-    "storage": "ok"
+    "storage": "ok",
+    "error_rate": "ok",
+    "latency": "ok",
+    "auth_failures": "failing",
+    "traffic_spike": "ok"
   }
 }
 ```
