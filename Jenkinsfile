@@ -153,6 +153,8 @@ pipeline {
                         '
                         scp -r backend_release/. \
                             ${REMOTE_USER}@${APP_HOST}:/opt/drms/backend/releases/${BUILD_VERSION}/
+                        scp backend/ecosystem.config.cjs \
+                            ${REMOTE_USER}@${APP_HOST}:/opt/drms/backend/ecosystem.config.cjs
                         ssh ${REMOTE_USER}@${APP_HOST} '
                             set -euxo pipefail
                             cd /opt/drms/backend/releases/${BUILD_VERSION}
@@ -190,8 +192,7 @@ pipeline {
                             echo "--- Migrations complete ---"
 
                             ln -sfn /opt/drms/backend/releases/${BUILD_VERSION} /opt/drms/backend/current
-                            cd /opt/drms/backend/current
-                            pm2 reload drms --update-env
+                            pm2 startOrReload /opt/drms/backend/ecosystem.config.cjs --update-env
                             pm2 save
                             cd /opt/drms/backend/releases
                             ls -1dt */ | tail -n +6 | xargs -r rm -rf

@@ -18,7 +18,7 @@ pm2 restart drms
 # If PM2 itself is not running
 pm2 resurrect       # restore last saved process list
 # or
-pm2 start /opt/drms/backend/ecosystem.config.js
+pm2 start /opt/drms/backend/ecosystem.config.cjs
 
 # Verify
 pm2 status drms
@@ -77,7 +77,7 @@ pm2 reload drms --update-env
    ```bash
    pm2 resurrect
    # or
-   pm2 start /opt/drms/backend/ecosystem.config.js
+   pm2 start /opt/drms/backend/ecosystem.config.cjs
    pm2 save
    ```
 4. If Nginx did not auto-start:

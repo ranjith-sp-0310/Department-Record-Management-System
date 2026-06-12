@@ -99,7 +99,7 @@ External:
 
 | Process | Command | Auto-restart |
 |---------|---------|--------------|
-| Backend | `pm2 start ecosystem.config.js` | Yes |
+| Backend | `pm2 start ecosystem.config.cjs` | Yes |
 | Health monitor | Runs inside backend process (setInterval) | N/A |
 | Metrics flush | Runs inside backend process (setInterval, 60s) | N/A |
 | Session cleanup | Runs inside backend process (setInterval, 1hr) | N/A |
