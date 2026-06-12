@@ -185,7 +185,7 @@ pipeline {
             steps {
                 sh '''
                     sleep 5
-                    curl -k -f https://prod-gateway-01/ > /dev/null
+                    curl -f https://prod-gateway-01/ > /dev/null
                     sleep 5
                     curl -k -f http://drms-app-01:5000/health > /dev/null
                 '''
